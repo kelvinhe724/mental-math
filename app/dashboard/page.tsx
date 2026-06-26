@@ -15,6 +15,18 @@ const WEAK_ACC     = 0.75;
 const SLOW_MULT    = 1.5;
 const MASTERY_MULT = 1.15;
 
+// ── Section header with divider ────────────────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <span className="text-[10px] font-semibold tracking-[0.14em] text-zinc-600 uppercase shrink-0">
+        {children}
+      </span>
+      <div className="flex-1 h-px bg-zinc-800/80" />
+    </div>
+  );
+}
+
 // ── Arc Gauge ──────────────────────────────────────────────────────────────────
 function ArcGauge({ score, max = 80, speed, acc, answerable }: {
   score: number; max?: number; speed: number; acc: number; answerable: number;
@@ -25,7 +37,6 @@ function ArcGauge({ score, max = 80, speed, acc, answerable }: {
   const fillLen = Math.max(0, Math.min(1, score / max)) * arcLen;
   const color   = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
 
-  // target tick at 70/80 position along the arc
   const tickAngleDeg = 135 + (70 / max) * 270;
   const tickRad = (tickAngleDeg * Math.PI) / 180;
   const tx1 = cx + (r - 7) * Math.cos(tickRad);
@@ -36,15 +47,12 @@ function ArcGauge({ score, max = 80, speed, acc, answerable }: {
   return (
     <div className="flex flex-col items-center mb-8">
       <svg viewBox="0 0 120 120" className="w-44 h-44">
-        {/* Track */}
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#27272a" strokeWidth={9}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1f1f23" strokeWidth={9}
           strokeLinecap="round"
           strokeDasharray={`${arcLen} ${circ - arcLen}`}
           transform={`rotate(135 ${cx} ${cy})`}
         />
-        {/* Target tick at 70 */}
         <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke="#3f3f46" strokeWidth={1.5} />
-        {/* Fill */}
         {fillLen > 0 && (
           <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={9}
             strokeLinecap="round"
@@ -52,26 +60,31 @@ function ArcGauge({ score, max = 80, speed, acc, answerable }: {
             transform={`rotate(135 ${cx} ${cy})`}
           />
         )}
-        <text x={cx} y={cy - 4} textAnchor="middle" fill="white" fontSize={22} fontWeight="bold">
+        {/* Score number — mono */}
+        <text x={cx} y={cy - 4} textAnchor="middle" fill="white" fontSize={22} fontWeight="700"
+          fontFamily="var(--font-jb-mono), monospace">
           {score}
         </text>
-        <text x={cx} y={cy + 11} textAnchor="middle" fill="#71717a" fontSize={10}>/ {max}</text>
-        <text x={cx} y={cy + 23} textAnchor="middle" fill="#52525b" fontSize={7} letterSpacing="1">
+        <text x={cx} y={cy + 11} textAnchor="middle" fill="#52525b" fontSize={10}
+          fontFamily="var(--font-jb-mono), monospace">
+          / {max}
+        </text>
+        <text x={cx} y={cy + 23} textAnchor="middle" fill="#3f3f46" fontSize={7} letterSpacing="1.5">
           TARGET 70
         </text>
       </svg>
-      <div className="flex gap-8 text-center mt-1">
+      <div className="flex gap-8 text-center mt-2">
         <div>
-          <div className="font-bold text-white tabular-nums">{speed.toFixed(1)}s</div>
-          <div className="text-zinc-500 text-xs mt-0.5">per q</div>
+          <div className="font-mono tabular-nums font-semibold text-white">{speed.toFixed(1)}s</div>
+          <div className="text-zinc-600 text-xs mt-0.5">per q</div>
         </div>
         <div>
-          <div className="font-bold text-white tabular-nums">{Math.round(acc * 100)}%</div>
-          <div className="text-zinc-500 text-xs mt-0.5">accuracy</div>
+          <div className="font-mono tabular-nums font-semibold text-white">{Math.round(acc * 100)}%</div>
+          <div className="text-zinc-600 text-xs mt-0.5">accuracy</div>
         </div>
         <div>
-          <div className="font-bold text-white tabular-nums">{answerable}</div>
-          <div className="text-zinc-500 text-xs mt-0.5">answerable</div>
+          <div className="font-mono tabular-nums font-semibold text-white">{answerable}</div>
+          <div className="text-zinc-600 text-xs mt-0.5">answerable</div>
         </div>
       </div>
     </div>
@@ -110,40 +123,35 @@ function RadarChart({ stats }: { stats: StatsMap }) {
 
   return (
     <div className="mb-8">
-      <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Skill Profile</h2>
-      <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 p-3">
+      <SectionLabel>Skill Profile</SectionLabel>
+      <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 p-3">
         <svg viewBox="0 0 220 220" className="w-full max-w-[220px] mx-auto">
-          {/* Grid rings */}
           {levels.map(l => (
             <polygon key={l} points={gridPoly(l * maxR)} fill="none"
               stroke={l === 1 ? "#3f3f46" : "#27272a"}
               strokeWidth={l === 1 ? 1 : 0.5}
             />
           ))}
-          {/* Axis lines */}
           {SKILL_IDS.map((_, i) => {
             const [x, y] = pt(i, maxR);
             return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#27272a" strokeWidth={0.5} />;
           })}
-          {/* Accuracy fill */}
-          <polygon points={fillPoly} fill="rgba(16,185,129,0.12)" stroke="#10b981" strokeWidth={1.5} />
-          {/* Vertex dots */}
+          <polygon points={fillPoly} fill="rgba(16,185,129,0.1)" stroke="#10b981" strokeWidth={1.5} />
           {accPts.map(([x, y], i) => {
             const acc = stats[SKILL_IDS[i]]?.accuracy ?? 0;
-            const dotColor = acc >= 0.9 ? "#10b981" : acc >= 0.75 ? "#f59e0b" : "#ef4444";
+            const c = acc >= 0.9 ? "#10b981" : acc >= 0.75 ? "#f59e0b" : acc > 0 ? "#ef4444" : "#3f3f46";
             return (
               <circle key={i} cx={x} cy={y} r={3.5}
-                fill={dotColor} stroke="#09090b" strokeWidth={1}
+                fill={c} stroke="#0a0a0e" strokeWidth={1.5}
               />
             );
           })}
-          {/* Labels */}
           {SKILL_IDS.map((id, i) => {
             const [x, y] = pt(i, maxR + 17);
             return (
               <text key={id} x={x} y={y}
                 textAnchor="middle" dominantBaseline="middle"
-                fill="#71717a" fontSize={8} fontWeight="500">
+                fill="#52525b" fontSize={8} fontWeight="500">
                 {ABBR[id]}
               </text>
             );
@@ -156,7 +164,8 @@ function RadarChart({ stats }: { stats: StatsMap }) {
 
 // ── Session Trend ──────────────────────────────────────────────────────────────
 function SessionTrend({ sessions }: { sessions: Array<{ n: number; correct: number }> }) {
-  const last10 = sessions.slice(-10);
+  const validSessions = sessions.filter(s => s.n > 0);
+  const last10 = validSessions.slice(-10);
   if (last10.length < 2) return null;
 
   const barH = 48, barW = 14, gap = 4;
@@ -164,8 +173,8 @@ function SessionTrend({ sessions }: { sessions: Array<{ n: number; correct: numb
 
   return (
     <div className="mb-8">
-      <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Accuracy Trend</h2>
-      <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 px-4 pt-3 pb-2">
+      <SectionLabel>Accuracy Trend</SectionLabel>
+      <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 px-4 pt-3 pb-2">
         <svg viewBox={`0 0 ${totalW} ${barH + 14}`} className="w-full" style={{ height: 70 }}>
           {last10.map((s, i) => {
             const acc   = s.n ? s.correct / s.n : 0;
@@ -175,16 +184,17 @@ function SessionTrend({ sessions }: { sessions: Array<{ n: number; correct: numb
             return (
               <g key={i}>
                 <rect x={x} y={barH - h} width={barW} height={h} rx={2.5}
-                  fill={color} opacity={0.85}
+                  fill={color} opacity={0.8}
                 />
-                <text x={x + barW / 2} y={barH + 10} textAnchor="middle" fill="#52525b" fontSize={7}>
+                <text x={x + barW / 2} y={barH + 10} textAnchor="middle" fill="#3f3f46" fontSize={7}
+                  fontFamily="var(--font-jb-mono), monospace">
                   {Math.round(acc * 100)}
                 </text>
               </g>
             );
           })}
         </svg>
-        <div className="flex justify-between text-zinc-600 text-[10px] mt-0.5">
+        <div className="flex justify-between text-zinc-700 text-[10px] mt-0.5">
           <span>older</span>
           <span>latest</span>
         </div>
@@ -269,8 +279,8 @@ export default function Dashboard() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <Link href="/" className="text-zinc-400 text-sm">← home</Link>
-        <h1 className="text-xl font-bold">Coach Report</h1>
+        <Link href="/" className="text-zinc-500 text-sm hover:text-zinc-300 transition-colors">← home</Link>
+        <h1 className="text-lg font-semibold tracking-tight">Coach Report</h1>
         <div />
       </div>
 
@@ -283,7 +293,7 @@ export default function Dashboard() {
           answerable={proj.answerable}
         />
       ) : (
-        <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 p-6 mb-8 text-center">
+        <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 p-6 mb-8 text-center">
           <div className="text-zinc-500 text-sm">Complete a few drills to see your Optiver estimate</div>
         </div>
       )}
@@ -294,7 +304,7 @@ export default function Dashboard() {
       {/* 3. Weaknesses */}
       {weaknesses.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Diagnose</h2>
+          <SectionLabel>Diagnose</SectionLabel>
           <div className="space-y-3">
             {weaknesses.map(({ skillId, stats: s }) => {
               const tgt      = TARGET_TIMES.medium;
@@ -309,42 +319,42 @@ export default function Dashboard() {
                 : `linear-gradient(90deg, #f59e0b 0%, #10b981 ${barStop}%)`;
 
               return (
-                <div key={skillId} className="bg-zinc-900/80 rounded-2xl p-4 border border-zinc-800">
+                <div key={skillId} className="bg-zinc-900/60 rounded-2xl p-4 border border-zinc-800/60">
                   <div className="flex items-start justify-between mb-3">
-                    <span className="font-semibold text-sm">{SKILL_LABELS[skillId]}</span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    <span className="font-medium text-sm text-zinc-100">{SKILL_LABELS[skillId]}</span>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide ${
                       isCrit
-                        ? "bg-red-900/60 text-red-400"
-                        : "bg-amber-900/40 text-amber-400"
+                        ? "bg-red-900/50 text-red-400"
+                        : "bg-amber-900/30 text-amber-500"
                     }`}>
-                      {isCrit ? "Critical" : "Needs Work"}
+                      {isCrit ? "CRITICAL" : "NEEDS WORK"}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {s.accuracy !== null && (
-                      <span className={`text-xs px-2 py-1 rounded-lg font-mono ${
-                        isWeak ? "bg-red-900/40 text-red-300" : "bg-amber-900/40 text-amber-300"
+                      <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
+                        isWeak ? "bg-red-900/30 text-red-300" : "bg-amber-900/30 text-amber-300"
                       }`}>
                         {Math.round(s.accuracy * 100)}% acc
                       </span>
                     )}
                     {s.avgTime !== null && (
-                      <span className={`text-xs px-2 py-1 rounded-lg font-mono ${
-                        isSlow ? "bg-red-900/40 text-red-300" : "bg-zinc-800 text-zinc-400"
+                      <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
+                        isSlow ? "bg-red-900/30 text-red-300" : "bg-zinc-800 text-zinc-400"
                       }`}>
                         {s.avgTime.toFixed(1)}s · target {tgt}s
                       </span>
                     )}
                   </div>
                   {s.accuracy !== null && (
-                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-3">
+                    <div className="h-1 bg-zinc-800 rounded-full overflow-hidden mb-3">
                       <div
                         className="h-full rounded-full"
                         style={{ width: `${Math.min(acc * 100, 100)}%`, background: gradient }}
                       />
                     </div>
                   )}
-                  <div className="bg-zinc-800/60 rounded-xl px-3 py-2 text-xs text-zinc-400 leading-relaxed">
+                  <div className="bg-zinc-800/40 rounded-xl px-3 py-2 text-xs text-zinc-400 leading-relaxed">
                     {getRandomTip(skillId)}
                   </div>
                 </div>
@@ -359,24 +369,32 @@ export default function Dashboard() {
 
       {/* 5. All Skills Grid */}
       <section className="mb-8">
-        <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">All Skills</h2>
+        <SectionLabel>All Skills</SectionLabel>
         <div className="grid grid-cols-2 gap-2">
           {SKILL_IDS.map(id => {
             const st = stats[id];
+            // Color by accuracy only — red = poor accuracy, not just slow
             const dotColor =
-              !st || st.n === 0                                                                            ? "#52525b"
-              : st.accuracy! >= MASTERY_ACC && st.avgTime! <= TARGET_TIMES.medium * MASTERY_MULT          ? "#10b981"
-              : st.accuracy! < WEAK_ACC     || st.avgTime! > TARGET_TIMES.medium * SLOW_MULT             ? "#ef4444"
+              !st || st.n === 0 ? "#3f3f46"
+              : st.accuracy! >= MASTERY_ACC ? "#10b981"
+              : st.accuracy! < WEAK_ACC     ? "#ef4444"
               : "#f59e0b";
 
+            const dataColor =
+              !st || st.n === 0 ? "#52525b"
+              : st.accuracy! >= MASTERY_ACC ? "#6ee7b7"  // emerald-300
+              : st.accuracy! < WEAK_ACC     ? "#fca5a5"  // red-300
+              : "#fcd34d";                                 // amber-300
+
             return (
-              <div key={id} className="bg-zinc-900/60 rounded-xl px-3 py-2.5 border border-zinc-800/60 flex items-center gap-2.5">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} />
+              <div key={id}
+                className="bg-zinc-900/50 rounded-xl px-3 py-2.5 border border-zinc-800/60 flex items-center gap-2.5">
+                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
                 <div className="min-w-0">
-                  <div className="text-xs font-medium text-zinc-200 truncate">{SKILL_LABELS[id]}</div>
-                  <div className="text-xs font-mono mt-0.5" style={{ color: dotColor }}>
+                  <div className="text-xs font-medium text-zinc-300 truncate leading-snug">{SKILL_LABELS[id]}</div>
+                  <div className="text-xs font-mono tabular-nums mt-0.5 leading-snug" style={{ color: dataColor }}>
                     {st.n === 0
-                      ? "no data"
+                      ? <span className="text-zinc-600 font-sans not-italic">no data</span>
                       : `${Math.round(st.accuracy! * 100)}%  ${st.avgTime!.toFixed(1)}s`}
                   </div>
                 </div>
@@ -389,12 +407,12 @@ export default function Dashboard() {
       {/* 6. Mastered */}
       {mastered.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Mastered</h2>
+          <SectionLabel>Mastered</SectionLabel>
           <div className="flex flex-wrap gap-2">
             {mastered.map(({ skillId }) => (
               <span key={skillId}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-emerald-700/50 bg-emerald-900/25 text-emerald-300 font-medium">
-                <span className="text-emerald-500 text-[10px]">✓</span>
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-emerald-800/60 bg-emerald-900/20 text-emerald-400 font-medium">
+                <span className="text-emerald-600 text-[9px]">✓</span>
                 {SKILL_LABELS[skillId]}
               </span>
             ))}
@@ -406,27 +424,33 @@ export default function Dashboard() {
       <section className="mb-4">
         <button
           onClick={() => setShowSessions(s => !s)}
-          className="w-full flex items-center justify-between text-xs font-semibold text-zinc-500 uppercase tracking-wide py-2"
+          className="w-full flex items-center justify-between py-2 group"
         >
-          <span>Sessions ({data.sessions.length})</span>
-          <span className="text-zinc-600">{showSessions ? "▲" : "▼"}</span>
+          <div className="flex items-center gap-3 flex-1">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-zinc-600 uppercase group-hover:text-zinc-500 transition-colors">
+              Sessions ({data.sessions.filter(s => s.n > 0).length})
+            </span>
+            <div className="flex-1 h-px bg-zinc-800/80" />
+          </div>
+          <span className="text-zinc-700 text-xs ml-3">{showSessions ? "▲" : "▼"}</span>
         </button>
         {showSessions && (
           <div className="space-y-2 mt-2">
-            {sessions.length === 0 && (
+            {sessions.filter(s => s.n > 0).length === 0 && (
               <p className="text-zinc-600 text-sm">No sessions yet.</p>
             )}
             {sessions.map((s, displayIdx) => {
+              if (s.n === 0) return null;
               const realIdx  = data.sessions.length - 1 - displayIdx;
               const ts       = s.ts.slice(0, 16).replace("T", " ");
               const acc      = s.n ? Math.round(s.correct / s.n * 100) : 0;
               const simScore = s.correct - (s.n - s.correct);
               return (
                 <div key={displayIdx}
-                  className="bg-zinc-900/60 rounded-xl px-4 py-3 flex items-center justify-between border border-zinc-800/50">
+                  className="bg-zinc-900/50 rounded-xl px-4 py-3 flex items-center justify-between border border-zinc-800/50">
                   <div>
-                    <div className="text-sm font-medium capitalize">{s.mode} — {s.n}q</div>
-                    <div className="text-xs text-zinc-500">
+                    <div className="text-sm font-medium capitalize text-zinc-200">{s.mode} — {s.n}q</div>
+                    <div className="text-xs text-zinc-600 font-mono tabular-nums mt-0.5">
                       {ts} · {acc}%{s.mode === "sim" ? ` · ${simScore}/80` : ""}
                     </div>
                   </div>
@@ -437,7 +461,7 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <button onClick={() => setDeleteIdx(realIdx)}
-                      className="text-xs text-zinc-600 hover:text-red-400 transition-colors">
+                      className="text-xs text-zinc-700 hover:text-red-400 transition-colors">
                       delete
                     </button>
                   )}
@@ -449,74 +473,75 @@ export default function Dashboard() {
       </section>
 
       {/* 8. Settings */}
-      <section className="border-t border-zinc-800/60 pt-3 mt-4">
+      <section className="mt-4">
         <button
           onClick={() => setShowSettings(s => !s)}
-          className="w-full flex items-center justify-between text-xs font-semibold text-zinc-500 uppercase tracking-wide py-2"
+          className="w-full flex items-center justify-between py-2 group"
         >
-          <span>⚙ Settings</span>
-          <span className="text-zinc-600">{showSettings ? "▲" : "▼"}</span>
+          <div className="flex items-center gap-3 flex-1">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-zinc-600 uppercase group-hover:text-zinc-500 transition-colors">
+              ⚙ Settings
+            </span>
+            <div className="flex-1 h-px bg-zinc-800/80" />
+          </div>
+          <span className="text-zinc-700 text-xs ml-3">{showSettings ? "▲" : "▼"}</span>
         </button>
         {showSettings && (
           <div className="mt-4 space-y-4">
-
-            {/* Sync */}
             <div>
-              <p className="text-xs text-zinc-500 mb-2 font-medium uppercase tracking-wide">Sync Between Devices</p>
-              <div className="bg-zinc-900/60 rounded-xl p-3 mb-2 border border-zinc-800/50">
+              <p className="text-xs text-zinc-500 mb-2 font-medium">Sync Between Devices</p>
+              <div className="bg-zinc-900/50 rounded-xl p-3 mb-2 border border-zinc-800/50">
                 <p className="text-xs text-zinc-600 mb-2">Your sync code — paste on another device</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs text-zinc-300 bg-zinc-800 rounded-lg px-3 py-2 break-all font-mono">
+                  <code className="flex-1 text-xs text-zinc-400 bg-zinc-800/60 rounded-lg px-3 py-2 break-all font-mono">
                     {myId || "loading…"}
                   </code>
                   <button onClick={copyId}
-                    className="text-xs bg-zinc-700 hover:bg-zinc-600 rounded-lg px-3 py-2 whitespace-nowrap transition-colors">
-                    {copied ? "✓ Copied" : "Copy"}
+                    className="text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg px-3 py-2 whitespace-nowrap transition-colors text-zinc-300">
+                    {copied ? "✓" : "Copy"}
                   </button>
                 </div>
               </div>
-              <div className="bg-zinc-900/60 rounded-xl p-3 border border-zinc-800/50">
-                <p className="text-xs text-zinc-600 mb-2">Got a code from another device? Paste it here</p>
+              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50">
+                <p className="text-xs text-zinc-600 mb-2">Got a code from another device?</p>
                 <div className="flex gap-2">
                   <input
                     value={syncInput}
                     onChange={e => setSyncInput(e.target.value)}
                     placeholder="paste sync code…"
-                    className="flex-1 text-xs bg-zinc-800 rounded-lg px-3 py-2 font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+                    className="flex-1 text-xs bg-zinc-800/60 rounded-lg px-3 py-2 font-mono text-zinc-300 placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-700"
                   />
                   <button onClick={handleLinkDevice}
-                    className="text-xs bg-blue-700 hover:bg-blue-600 rounded-lg px-3 py-2 transition-colors whitespace-nowrap">
+                    className="text-xs bg-blue-600 hover:bg-blue-500 rounded-lg px-3 py-2 transition-colors whitespace-nowrap font-medium">
                     Link
                   </button>
                 </div>
-                {syncMsg && <p className="text-xs text-zinc-400 mt-2">{syncMsg}</p>}
+                {syncMsg && <p className="text-xs text-zinc-500 mt-2">{syncMsg}</p>}
               </div>
             </div>
 
-            {/* Reset */}
             <div>
               {confirmReset ? (
-                <div className="bg-red-950/40 rounded-xl p-3 border border-red-900/40">
-                  <p className="text-xs text-red-300 mb-3">Delete all history? Can&apos;t be undone.</p>
+                <div className="bg-red-950/30 rounded-xl p-3 border border-red-900/30">
+                  <p className="text-xs text-red-400 mb-3">Delete all history? Can&apos;t be undone.</p>
                   <div className="flex gap-2">
                     <button onClick={handleReset}
                       className="flex-1 bg-red-700 hover:bg-red-600 rounded-lg py-2 text-xs font-semibold transition-colors">
                       Yes, reset
                     </button>
                     <button onClick={() => setConfirmReset(false)}
-                      className="flex-1 bg-zinc-800 rounded-lg py-2 text-xs transition-colors">
+                      className="flex-1 bg-zinc-800 rounded-lg py-2 text-xs transition-colors text-zinc-300">
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
                 <button onClick={() => setConfirmReset(true)}
-                  className="text-xs text-zinc-600 hover:text-red-400 transition-colors">
+                  className="text-xs text-zinc-700 hover:text-red-400 transition-colors">
                   Reset all data
                 </button>
               )}
             </div>
-
           </div>
         )}
       </section>
