@@ -163,7 +163,7 @@ function DrillInner() {
         <button
           disabled={!focusSkills.length}
           onClick={() => setPhase("running")}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-2xl py-4 font-bold text-lg transition-colors">
+          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-700 disabled:text-zinc-400 rounded-2xl py-4 font-bold text-lg transition-colors">
           Start
         </button>
       </main>
@@ -206,7 +206,7 @@ function DrillInner() {
 
         {missed.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Missed</h3>
+            <p className="text-xs text-zinc-600 mb-2">{missed.length} missed</p>
             <div className="space-y-2">
               {missed.slice(0, 8).map((a, i) => (
                 <div key={i} className="bg-zinc-900 rounded-xl px-4 py-3 text-sm">
@@ -223,13 +223,19 @@ function DrillInner() {
           </div>
         )}
 
+        {/* Primary action: drill again */}
+        <button
+          onClick={() => router.replace(`/drill?mode=${mode}${durSecs ? `&secs=${durSecs}` : ''}`)}
+          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-4 font-bold text-lg transition-colors mb-3">
+          Again →
+        </button>
         <div className="flex gap-3">
           <button onClick={() => router.push("/dashboard")}
-            className="flex-1 bg-zinc-800 hover:bg-zinc-700 rounded-2xl py-4 font-semibold transition-colors">
+            className="flex-1 bg-zinc-800 hover:bg-zinc-700 rounded-2xl py-3 font-medium text-sm transition-colors text-zinc-300">
             Coach Report
           </button>
           <button onClick={() => router.push("/")}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-500 rounded-2xl py-4 font-bold transition-colors">
+            className="flex-1 bg-zinc-800 hover:bg-zinc-700 rounded-2xl py-3 font-medium text-sm transition-colors text-zinc-300">
             Home
           </button>
         </div>

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   loadData, saveData, allSkillStats, deleteSession, resetAllData, PerfData,
@@ -15,76 +15,54 @@ const WEAK_ACC     = 0.75;
 const SLOW_MULT    = 1.5;
 const MASTERY_MULT = 1.15;
 
-// ── Section header with divider ────────────────────────────────────────────────
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 mb-4">
-      <span className="text-[10px] font-semibold tracking-[0.14em] text-zinc-600 uppercase shrink-0">
-        {children}
-      </span>
-      <div className="flex-1 h-px bg-zinc-800/80" />
-    </div>
-  );
-}
-
-// ── Arc Gauge ──────────────────────────────────────────────────────────────────
-function ArcGauge({ score, max = 80, speed, acc, answerable }: {
+// ── Score Block (replaces arc gauge hero-metric template) ──────────────────────
+function ScoreBlock({ score, max = 80, speed, acc, answerable }: {
   score: number; max?: number; speed: number; acc: number; answerable: number;
 }) {
-  const r = 50, cx = 60, cy = 60;
-  const circ   = 2 * Math.PI * r;
-  const arcLen = (270 / 360) * circ;
-  const fillLen = Math.max(0, Math.min(1, score / max)) * arcLen;
-  const color   = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
-
-  const tickAngleDeg = 135 + (70 / max) * 270;
-  const tickRad = (tickAngleDeg * Math.PI) / 180;
-  const tx1 = cx + (r - 7) * Math.cos(tickRad);
-  const ty1 = cy + (r - 7) * Math.sin(tickRad);
-  const tx2 = cx + (r + 4) * Math.cos(tickRad);
-  const ty2 = cy + (r + 4) * Math.sin(tickRad);
+  const pct        = Math.min(score / max, 1) * 100;
+  const targetPct  = (70 / max) * 100;
+  const scoreColor = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
+  const trackColor = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
 
   return (
-    <div className="flex flex-col items-center mb-8">
-      <svg viewBox="0 0 120 120" className="w-44 h-44">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1f1f23" strokeWidth={9}
-          strokeLinecap="round"
-          strokeDasharray={`${arcLen} ${circ - arcLen}`}
-          transform={`rotate(135 ${cx} ${cy})`}
-        />
-        <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke="#3f3f46" strokeWidth={1.5} />
-        {fillLen > 0 && (
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={9}
-            strokeLinecap="round"
-            strokeDasharray={`${fillLen} ${circ}`}
-            transform={`rotate(135 ${cx} ${cy})`}
-          />
-        )}
-        {/* Score number — mono */}
-        <text x={cx} y={cy - 4} textAnchor="middle" fill="white" fontSize={22} fontWeight="700"
-          fontFamily="var(--font-jb-mono), monospace">
+    <div className="mb-10">
+      {/* Score line */}
+      <div className="flex items-baseline gap-2.5 mb-3">
+        <span className="text-6xl font-bold font-mono tabular-nums leading-none"
+          style={{ color: scoreColor }}>
           {score}
-        </text>
-        <text x={cx} y={cy + 11} textAnchor="middle" fill="#52525b" fontSize={10}
-          fontFamily="var(--font-jb-mono), monospace">
-          / {max}
-        </text>
-        <text x={cx} y={cy + 23} textAnchor="middle" fill="#3f3f46" fontSize={7} letterSpacing="1.5">
-          TARGET 70
-        </text>
-      </svg>
-      <div className="flex gap-8 text-center mt-2">
+        </span>
+        <span className="text-zinc-600 text-xl">/80</span>
+        <span className="text-zinc-600 text-xs ml-1 self-center">Optiver estimate</span>
+      </div>
+
+      {/* Horizontal track */}
+      <div className="relative h-1 bg-zinc-800 rounded-full mb-1">
+        <div className="absolute left-0 top-0 h-full rounded-full transition-all duration-500"
+          style={{ width: `${pct}%`, background: trackColor }} />
+        {/* Target notch at 70 */}
+        <div className="absolute top-[-4px] w-px h-[9px] bg-zinc-500"
+          style={{ left: `${targetPct}%` }} />
+      </div>
+      <div className="flex justify-between text-[10px] text-zinc-700 mb-4">
+        <span>0</span>
+        <span>target 70</span>
+        <span>80</span>
+      </div>
+
+      {/* Sub-stats row */}
+      <div className="flex gap-6">
         <div>
-          <div className="font-mono tabular-nums font-semibold text-white">{speed.toFixed(1)}s</div>
-          <div className="text-zinc-600 text-xs mt-0.5">per q</div>
+          <span className="font-mono tabular-nums font-semibold text-zinc-200 text-sm">{speed.toFixed(1)}s</span>
+          <span className="text-zinc-600 text-xs ml-1.5">per q</span>
         </div>
         <div>
-          <div className="font-mono tabular-nums font-semibold text-white">{Math.round(acc * 100)}%</div>
-          <div className="text-zinc-600 text-xs mt-0.5">accuracy</div>
+          <span className="font-mono tabular-nums font-semibold text-zinc-200 text-sm">{Math.round(acc * 100)}%</span>
+          <span className="text-zinc-600 text-xs ml-1.5">accuracy</span>
         </div>
         <div>
-          <div className="font-mono tabular-nums font-semibold text-white">{answerable}</div>
-          <div className="text-zinc-600 text-xs mt-0.5">answerable</div>
+          <span className="font-mono tabular-nums font-semibold text-zinc-200 text-sm">{answerable}</span>
+          <span className="text-zinc-600 text-xs ml-1.5">answerable</span>
         </div>
       </div>
     </div>
@@ -122,9 +100,13 @@ function RadarChart({ stats }: { stats: StatsMap }) {
   const fillPoly = accPts.map(p => p.join(",")).join(" ");
 
   return (
-    <div className="mb-8">
-      <SectionLabel>Skill Profile</SectionLabel>
+    <div className="mb-10">
       <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 p-3">
+        {/* Caption inside card — not an eyebrow header above it */}
+        <div className="flex justify-between px-1 mb-1">
+          <span className="text-[10px] text-zinc-700">skill profile</span>
+          <span className="text-[10px] text-zinc-700">8 skills</span>
+        </div>
         <svg viewBox="0 0 220 220" className="w-full max-w-[220px] mx-auto">
           {levels.map(l => (
             <polygon key={l} points={gridPoly(l * maxR)} fill="none"
@@ -163,18 +145,29 @@ function RadarChart({ stats }: { stats: StatsMap }) {
 }
 
 // ── Session Trend ──────────────────────────────────────────────────────────────
-function SessionTrend({ sessions }: { sessions: Array<{ n: number; correct: number }> }) {
-  const validSessions = sessions.filter(s => s.n > 0);
-  const last10 = validSessions.slice(-10);
+function SessionTrend({ sessions }: {
+  sessions: Array<{ n: number; correct: number; ts: string; mode: string }>;
+}) {
+  const valid = sessions.filter(s => s.n > 0);
+  const last10 = valid.slice(-10);
   if (last10.length < 2) return null;
 
   const barH = 48, barW = 14, gap = 4;
   const totalW = last10.length * (barW + gap) - gap;
 
+  // Show date label for first and last bar
+  function shortDate(ts: string) {
+    const d = new Date(ts);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
   return (
-    <div className="mb-8">
-      <SectionLabel>Accuracy Trend</SectionLabel>
+    <div className="mb-10">
       <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 px-4 pt-3 pb-2">
+        <div className="flex justify-between px-1 mb-2">
+          <span className="text-[10px] text-zinc-700">session accuracy</span>
+          <span className="text-[10px] text-zinc-700">last {last10.length}</span>
+        </div>
         <svg viewBox={`0 0 ${totalW} ${barH + 14}`} className="w-full" style={{ height: 70 }}>
           {last10.map((s, i) => {
             const acc   = s.n ? s.correct / s.n : 0;
@@ -183,6 +176,7 @@ function SessionTrend({ sessions }: { sessions: Array<{ n: number; correct: numb
             const color = acc >= 0.85 ? "#10b981" : acc >= 0.7 ? "#f59e0b" : "#ef4444";
             return (
               <g key={i}>
+                <title>{shortDate(s.ts)} · {s.mode} · {Math.round(acc * 100)}% · {s.n}q</title>
                 <rect x={x} y={barH - h} width={barW} height={h} rx={2.5}
                   fill={color} opacity={0.8}
                 />
@@ -195,8 +189,8 @@ function SessionTrend({ sessions }: { sessions: Array<{ n: number; correct: numb
           })}
         </svg>
         <div className="flex justify-between text-zinc-700 text-[10px] mt-0.5">
-          <span>older</span>
-          <span>latest</span>
+          <span>{shortDate(last10[0].ts)}</span>
+          <span>{shortDate(last10[last10.length - 1].ts)}</span>
         </div>
       </div>
     </div>
@@ -272,7 +266,15 @@ export default function Dashboard() {
     r.stats.avgTime!  <= TARGET_TIMES.medium * MASTERY_MULT
   );
 
-  const sessions = [...data.sessions].reverse();
+  // Memoize tips so they don't randomize on every re-render
+  const weaknessTips = useMemo(
+    () => Object.fromEntries(weaknesses.map(({ skillId }) => [skillId, getRandomTip(skillId)])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weaknesses.map(w => w.skillId).join(",")]
+  );
+
+  const validSessions = data.sessions.filter(s => s.n > 0);
+  const sessions      = [...validSessions].reverse();
 
   return (
     <main className="max-w-md mx-auto px-4 pt-8 pb-16">
@@ -284,16 +286,16 @@ export default function Dashboard() {
         <div />
       </div>
 
-      {/* 1. Hero Arc Gauge */}
+      {/* 1. Score block */}
       {proj ? (
-        <ArcGauge
+        <ScoreBlock
           score={proj.projectedScore}
           speed={proj.avgSpeed}
           acc={proj.avgAcc}
           answerable={proj.answerable}
         />
       ) : (
-        <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 p-6 mb-8 text-center">
+        <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 p-6 mb-10 text-center">
           <div className="text-zinc-500 text-sm">Complete a few drills to see your Optiver estimate</div>
         </div>
       )}
@@ -301,147 +303,137 @@ export default function Dashboard() {
       {/* 2. Radar Chart */}
       <RadarChart stats={stats} />
 
-      {/* 3. Weaknesses */}
+      {/* 3. Weaknesses — no header, severity badges self-identify the section */}
       {weaknesses.length > 0 && (
-        <section className="mb-8">
-          <SectionLabel>Diagnose</SectionLabel>
-          <div className="space-y-3">
-            {weaknesses.map(({ skillId, stats: s }) => {
-              const tgt      = TARGET_TIMES.medium;
-              const isSlow   = s.avgTime  !== null && s.avgTime  > tgt * SLOW_MULT;
-              const isWeak   = s.accuracy !== null && s.accuracy < WEAK_ACC;
-              const isCrit   = (s.accuracy !== null && s.accuracy < 0.65) ||
-                               (s.avgTime  !== null && s.avgTime  > tgt * 2);
-              const acc      = s.accuracy ?? 0;
-              const barStop  = Math.min(acc * 100 * 1.3, 100);
-              const gradient = isWeak
-                ? `linear-gradient(90deg, #ef4444 0%, #f59e0b ${barStop}%)`
-                : `linear-gradient(90deg, #f59e0b 0%, #10b981 ${barStop}%)`;
-
-              return (
-                <div key={skillId} className="bg-zinc-900/60 rounded-2xl p-4 border border-zinc-800/60">
-                  <div className="flex items-start justify-between mb-3">
-                    <span className="font-medium text-sm text-zinc-100">{SKILL_LABELS[skillId]}</span>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide ${
-                      isCrit
-                        ? "bg-red-900/50 text-red-400"
-                        : "bg-amber-900/30 text-amber-500"
-                    }`}>
-                      {isCrit ? "CRITICAL" : "NEEDS WORK"}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {s.accuracy !== null && (
-                      <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
-                        isWeak ? "bg-red-900/30 text-red-300" : "bg-amber-900/30 text-amber-300"
-                      }`}>
-                        {Math.round(s.accuracy * 100)}% acc
-                      </span>
-                    )}
-                    {s.avgTime !== null && (
-                      <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
-                        isSlow ? "bg-red-900/30 text-red-300" : "bg-zinc-800 text-zinc-400"
-                      }`}>
-                        {s.avgTime.toFixed(1)}s · target {tgt}s
-                      </span>
-                    )}
-                  </div>
-                  {s.accuracy !== null && (
-                    <div className="h-1 bg-zinc-800 rounded-full overflow-hidden mb-3">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${Math.min(acc * 100, 100)}%`, background: gradient }}
-                      />
-                    </div>
-                  )}
-                  <div className="bg-zinc-800/40 rounded-xl px-3 py-2 text-xs text-zinc-400 leading-relaxed">
-                    {getRandomTip(skillId)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* 4. Session Trend */}
-      <SessionTrend sessions={data.sessions} />
-
-      {/* 5. All Skills Grid */}
-      <section className="mb-8">
-        <SectionLabel>All Skills</SectionLabel>
-        <div className="grid grid-cols-2 gap-2">
-          {SKILL_IDS.map(id => {
-            const st = stats[id];
-            // Color by accuracy only — red = poor accuracy, not just slow
-            const dotColor =
-              !st || st.n === 0 ? "#3f3f46"
-              : st.accuracy! >= MASTERY_ACC ? "#10b981"
-              : st.accuracy! < WEAK_ACC     ? "#ef4444"
-              : "#f59e0b";
-
-            const dataColor =
-              !st || st.n === 0 ? "#52525b"
-              : st.accuracy! >= MASTERY_ACC ? "#6ee7b7"  // emerald-300
-              : st.accuracy! < WEAK_ACC     ? "#fca5a5"  // red-300
-              : "#fcd34d";                                 // amber-300
+        <div className="space-y-3 mb-10">
+          {weaknesses.map(({ skillId, stats: s }) => {
+            const tgt      = TARGET_TIMES.medium;
+            const isSlow   = s.avgTime  !== null && s.avgTime  > tgt * SLOW_MULT;
+            const isWeak   = s.accuracy !== null && s.accuracy < WEAK_ACC;
+            const isCrit   = (s.accuracy !== null && s.accuracy < 0.65) ||
+                             (s.avgTime  !== null && s.avgTime  > tgt * 2);
+            const acc      = s.accuracy ?? 0;
+            const barStop  = Math.min(acc * 100 * 1.3, 100);
+            const gradient = isWeak
+              ? `linear-gradient(90deg, #ef4444 0%, #f59e0b ${barStop}%)`
+              : `linear-gradient(90deg, #f59e0b 0%, #10b981 ${barStop}%)`;
 
             return (
-              <div key={id}
-                className="bg-zinc-900/50 rounded-xl px-3 py-2.5 border border-zinc-800/60 flex items-center gap-2.5">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-zinc-300 truncate leading-snug">{SKILL_LABELS[id]}</div>
-                  <div className="text-xs font-mono tabular-nums mt-0.5 leading-snug" style={{ color: dataColor }}>
-                    {st.n === 0
-                      ? <span className="text-zinc-600 font-sans not-italic">no data</span>
-                      : `${Math.round(st.accuracy! * 100)}%  ${st.avgTime!.toFixed(1)}s`}
+              <div key={skillId} className="bg-zinc-900/60 rounded-2xl p-4 border border-zinc-800/60">
+                <div className="flex items-start justify-between mb-3">
+                  <span className="font-medium text-sm text-zinc-100">{SKILL_LABELS[skillId]}</span>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide ${
+                    isCrit
+                      ? "bg-red-900/50 text-red-400"
+                      : "bg-amber-900/30 text-amber-500"
+                  }`}>
+                    {isCrit ? "CRITICAL" : "NEEDS WORK"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {s.accuracy !== null && (
+                    <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
+                      isWeak ? "bg-red-900/30 text-red-300" : "bg-amber-900/30 text-amber-300"
+                    }`}>
+                      {Math.round(s.accuracy * 100)}% acc
+                    </span>
+                  )}
+                  {s.avgTime !== null && (
+                    <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
+                      isSlow ? "bg-red-900/30 text-red-300" : "bg-zinc-800 text-zinc-400"
+                    }`}>
+                      {s.avgTime.toFixed(1)}s · target {tgt}s
+                    </span>
+                  )}
+                </div>
+                {s.accuracy !== null && (
+                  <div className="h-1 bg-zinc-800 rounded-full overflow-hidden mb-3">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.min(acc * 100, 100)}%`, background: gradient }}
+                    />
                   </div>
+                )}
+                <div className="bg-zinc-800/40 rounded-xl px-3 py-2 text-xs text-zinc-400 leading-relaxed">
+                  {weaknessTips[skillId]}
                 </div>
               </div>
             );
           })}
         </div>
-      </section>
-
-      {/* 6. Mastered */}
-      {mastered.length > 0 && (
-        <section className="mb-8">
-          <SectionLabel>Mastered</SectionLabel>
-          <div className="flex flex-wrap gap-2">
-            {mastered.map(({ skillId }) => (
-              <span key={skillId}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-emerald-800/60 bg-emerald-900/20 text-emerald-400 font-medium">
-                <span className="text-emerald-600 text-[9px]">✓</span>
-                {SKILL_LABELS[skillId]}
-              </span>
-            ))}
-          </div>
-        </section>
       )}
 
-      {/* 7. Session History */}
-      <section className="mb-4">
+      {/* 4. Session Trend */}
+      <SessionTrend sessions={data.sessions} />
+
+      {/* 5. All Skills Grid — no header, grid is self-identifying */}
+      <div className="grid grid-cols-2 gap-2 mb-10">
+        {SKILL_IDS.map(id => {
+          const st = stats[id];
+          const dotColor =
+            !st || st.n === 0 ? "#3f3f46"
+            : st.accuracy! >= MASTERY_ACC ? "#10b981"
+            : st.accuracy! < WEAK_ACC     ? "#ef4444"
+            : "#f59e0b";
+          const dataColor =
+            !st || st.n === 0 ? "#52525b"
+            : st.accuracy! >= MASTERY_ACC ? "#6ee7b7"
+            : st.accuracy! < WEAK_ACC     ? "#fca5a5"
+            : "#fcd34d";
+
+          return (
+            <div key={id}
+              className="bg-zinc-900/50 rounded-xl px-3 py-2.5 border border-zinc-800/60 flex items-center gap-2.5">
+              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-zinc-300 truncate leading-snug">
+                  {SKILL_LABELS[id]}
+                </div>
+                {st.n === 0 ? (
+                  <div className="text-xs text-zinc-600 mt-0.5 leading-snug">no data</div>
+                ) : (
+                  <div className="text-xs font-mono tabular-nums mt-0.5 leading-snug"
+                    style={{ color: dataColor }}>
+                    {Math.round(st.accuracy! * 100)}%&nbsp;&nbsp;{st.avgTime!.toFixed(1)}s
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 6. Mastered — chips, no header */}
+      {mastered.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-10">
+          {mastered.map(({ skillId }) => (
+            <span key={skillId}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-emerald-800/60 bg-emerald-900/20 text-emerald-400 font-medium">
+              <span className="text-emerald-600 text-[9px]">✓</span>
+              {SKILL_LABELS[skillId]}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 7. Sessions — collapsible, trigger is the label */}
+      <div className="mb-1">
         <button
           onClick={() => setShowSessions(s => !s)}
-          className="w-full flex items-center justify-between py-2 group"
+          className="w-full flex items-center justify-between py-3 border-t border-zinc-800/60 group"
         >
-          <div className="flex items-center gap-3 flex-1">
-            <span className="text-[10px] font-semibold tracking-[0.14em] text-zinc-600 uppercase group-hover:text-zinc-500 transition-colors">
-              Sessions ({data.sessions.filter(s => s.n > 0).length})
-            </span>
-            <div className="flex-1 h-px bg-zinc-800/80" />
-          </div>
-          <span className="text-zinc-700 text-xs ml-3">{showSessions ? "▲" : "▼"}</span>
+          <span className="text-sm text-zinc-500 group-hover:text-zinc-300 transition-colors">
+            Sessions ({validSessions.length})
+          </span>
+          <span className="text-zinc-700 text-xs">{showSessions ? "▲" : "▼"}</span>
         </button>
         {showSessions && (
-          <div className="space-y-2 mt-2">
-            {sessions.filter(s => s.n > 0).length === 0 && (
-              <p className="text-zinc-600 text-sm">No sessions yet.</p>
+          <div className="space-y-2 pb-2">
+            {sessions.length === 0 && (
+              <p className="text-zinc-600 text-sm py-2">No sessions yet.</p>
             )}
             {sessions.map((s, displayIdx) => {
-              if (s.n === 0) return null;
-              const realIdx  = data.sessions.length - 1 - displayIdx;
+              const realIdx  = validSessions.length - 1 - displayIdx;
               const ts       = s.ts.slice(0, 16).replace("T", " ");
               const acc      = s.n ? Math.round(s.correct / s.n * 100) : 0;
               const simScore = s.correct - (s.n - s.correct);
@@ -470,28 +462,27 @@ export default function Dashboard() {
             })}
           </div>
         )}
-      </section>
+      </div>
 
-      {/* 8. Settings */}
-      <section className="mt-4">
+      {/* 8. Settings — collapsible */}
+      <div>
         <button
           onClick={() => setShowSettings(s => !s)}
-          className="w-full flex items-center justify-between py-2 group"
+          className="w-full flex items-center justify-between py-3 border-t border-zinc-800/60 group"
         >
-          <div className="flex items-center gap-3 flex-1">
-            <span className="text-[10px] font-semibold tracking-[0.14em] text-zinc-600 uppercase group-hover:text-zinc-500 transition-colors">
-              ⚙ Settings
-            </span>
-            <div className="flex-1 h-px bg-zinc-800/80" />
-          </div>
-          <span className="text-zinc-700 text-xs ml-3">{showSettings ? "▲" : "▼"}</span>
+          <span className="text-sm text-zinc-500 group-hover:text-zinc-300 transition-colors">
+            Settings
+          </span>
+          <span className="text-zinc-700 text-xs">{showSettings ? "▲" : "▼"}</span>
         </button>
         {showSettings && (
-          <div className="mt-4 space-y-4">
+          <div className="space-y-4 pb-4">
+
+            {/* Sync */}
             <div>
-              <p className="text-xs text-zinc-500 mb-2 font-medium">Sync Between Devices</p>
+              <p className="text-xs text-zinc-600 mb-2">Sync between devices</p>
               <div className="bg-zinc-900/50 rounded-xl p-3 mb-2 border border-zinc-800/50">
-                <p className="text-xs text-zinc-600 mb-2">Your sync code — paste on another device</p>
+                <p className="text-xs text-zinc-700 mb-2">Your sync code — paste on another device</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs text-zinc-400 bg-zinc-800/60 rounded-lg px-3 py-2 break-all font-mono">
                     {myId || "loading…"}
@@ -503,7 +494,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50">
-                <p className="text-xs text-zinc-600 mb-2">Got a code from another device?</p>
+                <p className="text-xs text-zinc-700 mb-2">Got a code from another device?</p>
                 <div className="flex gap-2">
                   <input
                     value={syncInput}
@@ -520,13 +511,15 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Reset */}
             <div>
               {confirmReset ? (
                 <div className="bg-red-950/30 rounded-xl p-3 border border-red-900/30">
-                  <p className="text-xs text-red-400 mb-3">Delete all history? Can&apos;t be undone.</p>
+                  {/* Fixed: was text-zinc-400 on bg-red-900 → now text-red-300 */}
+                  <p className="text-xs text-red-300 mb-3">Delete all history? Can&apos;t be undone.</p>
                   <div className="flex gap-2">
                     <button onClick={handleReset}
-                      className="flex-1 bg-red-700 hover:bg-red-600 rounded-lg py-2 text-xs font-semibold transition-colors">
+                      className="flex-1 bg-red-700 hover:bg-red-600 rounded-lg py-2 text-xs font-semibold transition-colors text-white">
                       Yes, reset
                     </button>
                     <button onClick={() => setConfirmReset(false)}
@@ -542,9 +535,10 @@ export default function Dashboard() {
                 </button>
               )}
             </div>
+
           </div>
         )}
-      </section>
+      </div>
 
     </main>
   );
