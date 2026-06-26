@@ -60,10 +60,10 @@ export default function Numpad({ value, onChange, onSubmit }: NumpadProps) {
     requestAnimationFrame(() => el.setSelectionRange(s + 1, s + 1));
   }
 
-  const num = "flex items-center justify-center rounded-2xl text-2xl font-semibold select-none active:scale-95 transition-transform cursor-pointer h-[60px] bg-zinc-800/80 hover:bg-zinc-700 text-white border border-white/5";
-  const sym = "flex items-center justify-center rounded-2xl text-xl font-medium select-none active:scale-95 transition-transform cursor-pointer h-[60px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/5";
-  const nav = "flex items-center justify-center rounded-xl text-sm font-medium select-none active:scale-95 transition-transform cursor-pointer h-[42px] bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 border border-white/5 gap-1";
-  const ok  = `flex items-center justify-center rounded-2xl text-lg font-bold select-none active:scale-95 transition-transform cursor-pointer h-[60px] col-span-2 ${value ? "bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black" : "bg-zinc-800/40 text-zinc-600 cursor-not-allowed"}`;
+  const num = "flex items-center justify-center rounded-2xl text-2xl font-semibold select-none active:scale-95 transition-transform cursor-pointer h-14 bg-zinc-800 hover:bg-zinc-700 text-white";
+  const sym = "flex items-center justify-center rounded-2xl text-xl font-medium select-none active:scale-95 transition-transform cursor-pointer h-14 bg-zinc-900 hover:bg-zinc-800 text-zinc-300";
+  const nav = "flex items-center justify-center rounded-xl text-lg select-none active:scale-95 transition-transform cursor-pointer h-9 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-500";
+  const ok  = `flex items-center justify-center rounded-2xl text-lg font-bold select-none active:scale-95 transition-transform cursor-pointer h-14 col-span-2 ${value ? "bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black" : "bg-zinc-800/40 text-zinc-600 cursor-not-allowed"}`;
 
   return (
     <div className="w-full max-w-xs mx-auto space-y-2">
@@ -81,14 +81,10 @@ export default function Numpad({ value, onChange, onSubmit }: NumpadProps) {
                    focus:outline-none focus:border-zinc-500 caret-emerald-400 mb-1"
       />
 
-      {/* Cursor navigation row (mobile) */}
+      {/* Cursor navigation row — compact arrows for mobile */}
       <div className="grid grid-cols-2 gap-2">
-        <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("←"); }}>
-          ← move cursor
-        </button>
-        <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("→"); }}>
-          move cursor →
-        </button>
+        <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("←"); }}>←</button>
+        <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("→"); }}>→</button>
       </div>
 
       {/* Numpad grid: 4 columns */}

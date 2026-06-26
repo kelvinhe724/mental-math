@@ -238,98 +238,87 @@ function DrillInner() {
   }
 
   // ── Active drill ───────────────────────────────────────────────────────────
-  const feedbackBg =
-    feedback === "correct" ? "bg-emerald-500/10 border-emerald-500/20" :
-    feedback === "wrong"   ? "bg-red-500/10 border-red-500/20" : "";
+  const feedbackColor =
+    feedback === "correct" ? "text-emerald-400" :
+    feedback === "wrong"   ? "text-red-400"     : "";
 
   return (
-    <main className="max-w-md mx-auto min-h-screen px-4 flex flex-col" style={{ paddingTop: "env(safe-area-inset-top, 16px)" }}>
+    // Use 100dvh so numpad always anchors to bottom on mobile
+    <main className="max-w-md mx-auto flex flex-col px-4" style={{ height: "100dvh", paddingTop: "env(safe-area-inset-top, 12px)", paddingBottom: "env(safe-area-inset-bottom, 12px)" }}>
 
-      {/* ── Header bar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between py-4 mb-2">
-        {/* End / quit button */}
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between py-3 shrink-0">
         <button
           onClick={() => finishSession()}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-lg"
-          title="End session"
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
         >
           ✕
         </button>
 
-        {/* Timer + counter pill */}
         <div className="flex items-center gap-2 bg-zinc-900 rounded-full px-4 py-1.5 border border-zinc-800">
           {durSecs
             ? <Timer totalSecs={durSecs} onExpire={handleExpire} running={phase === "running"} />
-            : <span className="text-zinc-400 text-sm font-mono">∞</span>
+            : <span className="text-zinc-500 text-sm">open</span>
           }
-          <span className="text-zinc-600 text-xs">·</span>
-          <span className="text-zinc-400 text-sm">Q{qCount + (feedback ? 0 : 1)}</span>
+          <span className="text-zinc-700 text-xs">·</span>
+          <span className="text-zinc-400 text-sm font-medium">Q{qCount + (feedback ? 0 : 1)}</span>
         </div>
 
-        {/* Pause button */}
         <button
           onClick={togglePause}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-base"
-          title={phase === "paused" ? "Resume" : "Pause"}
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
         >
           {phase === "paused" ? "▶" : "⏸"}
         </button>
       </div>
 
-      {/* ── Paused state ───────────────────────────────────────────────────── */}
+      {/* ── Paused ──────────────────────────────────────────────────────────── */}
       {phase === "paused" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-6">
-          <div className="text-5xl">⏸</div>
-          <p className="text-zinc-400 text-lg">Paused</p>
-          <button
-            onClick={togglePause}
-            className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-8 py-3 font-semibold transition-colors"
-          >
+        <div className="flex-1 flex flex-col items-center justify-center gap-5">
+          <p className="text-zinc-500 text-lg">Paused</p>
+          <button onClick={togglePause} className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-8 py-3 font-semibold transition-colors">
             ▶ Resume
           </button>
         </div>
       )}
 
-      {/* ── Active question ─────────────────────────────────────────────────── */}
+      {/* ── Question area (top, grows) ───────────────────────────────────────── */}
       {phase === "running" && current && (
-        <div className="flex-1 flex flex-col">
-          {/* Skill badge */}
-          <div className="mb-5">
-            <span className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">
+        <>
+          <div className="flex-1 flex flex-col justify-center pt-2">
+            <p className="text-xs font-semibold tracking-widest text-zinc-600 uppercase mb-4">
               {SKILL_LABELS[current.skillId]}
-            </span>
-          </div>
+            </p>
 
-          {/* Question */}
-          <div className="mb-1">
-            <div className="text-[2.8rem] font-bold leading-tight tracking-tight text-white">
+            <div className="text-[3rem] font-bold leading-tight tracking-tight text-white mb-2">
               {current.q.text}
             </div>
-            {current.q.subtext && (
-              <div className="text-sm text-zinc-500 mt-1">{current.q.subtext}</div>
-            )}
-          </div>
 
-          {/* Feedback band */}
-          <div className={`rounded-2xl px-4 py-3 mb-4 mt-2 border transition-all duration-200 min-h-[52px] ${feedbackBg}`}>
-            {feedback === "correct" && (
-              <span className="text-emerald-400 font-semibold">✓ Correct</span>
+            {current.q.subtext && (
+              <p className="text-sm text-zinc-500 mb-2">{current.q.subtext}</p>
             )}
-            {feedback === "wrong" && (
-              <div>
-                <span className="text-red-400 font-semibold">✗ </span>
-                <span className="text-zinc-300">Answer: </span>
-                <span className="text-white font-mono font-bold">{String(current.q.answer)}</span>
-                {tip && <div className="text-zinc-400 text-xs mt-1.5">{tip}</div>}
+
+            {/* Inline feedback — no reserved space, appears only when needed */}
+            {feedback && (
+              <div className={`mt-2 text-base font-semibold ${feedbackColor}`}>
+                {feedback === "correct" && "✓ Correct"}
+                {feedback === "wrong" && (
+                  <span>
+                    ✗ &nbsp;
+                    <span className="text-zinc-400 font-normal">Answer: </span>
+                    <span className="font-mono text-white">{String(current.q.answer)}</span>
+                    {tip && <div className="text-zinc-500 text-sm font-normal mt-1">{tip}</div>}
+                  </span>
+                )}
               </div>
             )}
           </div>
 
-          {/* Numpad */}
-          <div className="mt-auto pb-4">
+          {/* ── Numpad (bottom, fixed height) ─────────────────────────────────── */}
+          <div className="shrink-0 pb-2">
             <Numpad value={input} onChange={setInput} onSubmit={handleSubmit} />
           </div>
-        </div>
+        </>
       )}
     </main>
   );
