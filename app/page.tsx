@@ -6,31 +6,25 @@ import { optiverProjection } from "@/lib/engine";
 import { pullFromCloud, mergeData, getLastSync } from "@/lib/sync";
 
 const MODES = [
-  { label: "Blitz",       sub: "1 min",        href: "/drill?mode=adaptive&secs=60",  color: "bg-violet-700 hover:bg-violet-600 active:bg-violet-800" },
-  { label: "Speed",       sub: "2 min",        href: "/drill?mode=adaptive&secs=120", color: "bg-blue-700 hover:bg-blue-600 active:bg-blue-800" },
-  { label: "Quick",       sub: "5 min",        href: "/drill?mode=adaptive&secs=300", color: "bg-cyan-800 hover:bg-cyan-700 active:bg-cyan-900" },
-  { label: "Full",        sub: "15 min",       href: "/drill?mode=adaptive&secs=900", color: "bg-teal-800 hover:bg-teal-700 active:bg-teal-900" },
-  { label: "Optiver Sim", sub: "80 q · 8 min", href: "/drill?mode=sim",              color: "bg-amber-700 hover:bg-amber-600 active:bg-amber-800" },
-  { label: "Focus",       sub: "pick skills",  href: "/drill?mode=focus",             color: "bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-800" },
+  { label: "Blitz",   sub: "1 min",        href: "/drill?mode=adaptive&secs=60",  accent: "#7c3aed" },
+  { label: "Speed",   sub: "2 min",        href: "/drill?mode=adaptive&secs=120", accent: "#1d4ed8" },
+  { label: "Quick",   sub: "5 min",        href: "/drill?mode=adaptive&secs=300", accent: "#0e7490" },
+  { label: "Full",    sub: "15 min",       href: "/drill?mode=adaptive&secs=900", accent: "#0f766e" },
+  { label: "Sim",     sub: "80 q · 8 min", href: "/drill?mode=sim",              accent: "#b45309" },
+  { label: "Focus",   sub: "pick skills",  href: "/drill?mode=focus",             accent: "#374151" },
 ];
 
 export default function Home() {
-  const [total,    setTotal]    = useState<number | null>(null);
-  const [proj,     setProj]     = useState<{ projectedScore: number } | null>(null);
-  const [syncing,  setSyncing]  = useState(true);
+  const [total,   setTotal]   = useState<number | null>(null);
+  const [proj,    setProj]    = useState<{ projectedScore: number } | null>(null);
+  const [syncing, setSyncing] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
       let local = loadData();
-
-      // Pull from cloud and merge on every load
       const cloud = await pullFromCloud();
-      if (cloud) {
-        local = mergeData(local, cloud);
-        saveData(local);
-      }
-
+      if (cloud) { local = mergeData(local, cloud); saveData(local); }
       setTotal(totalQuestions(local));
       setProj(optiverProjection(local));
       setLastSync(getLastSync());
@@ -40,61 +34,68 @@ export default function Home() {
   }, []);
 
   function fmtSync(ts: string | null) {
-    if (!ts) return "never synced";
+    if (!ts) return null;
     const diff = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
-    if (diff < 1)  return "synced just now";
+    if (diff < 1)  return "synced";
     if (diff < 60) return `synced ${diff}m ago`;
     return `synced ${Math.round(diff / 60)}h ago`;
   }
 
+  const projScore = proj?.projectedScore ?? null;
+  const projColor = projScore === null ? "#52525b" : projScore >= 70 ? "#10b981" : projScore >= 50 ? "#f59e0b" : "#ef4444";
+
   return (
-    <main className="max-w-md mx-auto px-4 pt-10 pb-8">
-      <div className="flex items-start justify-between mb-1">
-        <h1 className="text-3xl font-bold">Mental Math</h1>
-        <span className="text-xs text-zinc-600 mt-2">
-          {syncing ? "syncing…" : fmtSync(lastSync)}
-        </span>
-      </div>
-      <p className="text-zinc-400 text-sm mb-6">Adaptive quant interview prep</p>
+    <main className="max-w-md mx-auto px-5 pb-8" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 40px)" }}>
 
-      {/* stats strip */}
-      {total !== null && (
-        <div className="flex gap-3 mb-8">
-          <div className="bg-zinc-900 rounded-2xl px-4 py-4 flex-1 text-center">
-            <div className="text-2xl font-bold">{total}</div>
-            <div className="text-zinc-500 text-xs mt-0.5">total reps</div>
-          </div>
-          {proj ? (
-            <div className={`rounded-2xl px-4 py-4 flex-1 text-center ${
-              proj.projectedScore >= 70 ? "bg-emerald-900/60" :
-              proj.projectedScore >= 50 ? "bg-amber-900/60"  : "bg-red-900/60"
-            }`}>
-              <div className="text-2xl font-bold">{proj.projectedScore}<span className="text-sm text-zinc-400">/80</span></div>
-              <div className="text-zinc-300 text-xs mt-0.5">Optiver est.</div>
-            </div>
-          ) : (
-            <div className="bg-zinc-900 rounded-2xl px-4 py-4 flex-1 text-center">
-              <div className="text-2xl font-bold text-zinc-600">—</div>
-              <div className="text-zinc-500 text-xs mt-0.5">need more reps</div>
-            </div>
-          )}
+      {/* Title row */}
+      <div className="flex items-end justify-between mb-8">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight">Mental Math</h1>
+          <p className="text-zinc-500 text-sm mt-1">Quant interview prep</p>
         </div>
-      )}
+        {!syncing && fmtSync(lastSync) && (
+          <span className="text-xs text-zinc-600 mb-1">{fmtSync(lastSync)}</span>
+        )}
+      </div>
 
-      {/* mode grid */}
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-3 mb-8">
+        <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
+          <div className="text-3xl font-bold tabular-nums">{total ?? "—"}</div>
+          <div className="text-zinc-500 text-xs mt-1 font-medium uppercase tracking-wide">total reps</div>
+        </div>
+        <div className="rounded-2xl border p-4" style={{
+          background: `${projColor}18`,
+          borderColor: `${projColor}30`,
+        }}>
+          <div className="text-3xl font-bold tabular-nums" style={{ color: projColor }}>
+            {projScore !== null ? projScore : "—"}
+            {projScore !== null && <span className="text-base font-normal text-zinc-500">/80</span>}
+          </div>
+          <div className="text-zinc-500 text-xs mt-1 font-medium uppercase tracking-wide">
+            {projScore !== null ? "optiver est." : "need more reps"}
+          </div>
+        </div>
+      </div>
+
+      {/* Mode grid */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         {MODES.map(m => (
           <Link key={m.href} href={m.href}
-            className={`${m.color} rounded-2xl px-4 py-5 transition-colors`}>
-            <div className="font-bold text-lg leading-tight">{m.label}</div>
-            <div className="text-sm opacity-70 mt-0.5">{m.sub}</div>
+            className="rounded-2xl px-4 py-5 transition-all active:scale-95 border border-white/5"
+            style={{ background: `${m.accent}cc` }}
+          >
+            <div className="font-bold text-xl leading-tight">{m.label}</div>
+            <div className="text-sm text-white/60 mt-0.5">{m.sub}</div>
           </Link>
         ))}
       </div>
 
+      {/* Dashboard link */}
       <Link href="/dashboard"
-        className="block w-full text-center bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 rounded-2xl py-4 font-semibold transition-colors">
-        Coach Report &amp; Stats →
+        className="flex items-center justify-between w-full bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 transition-colors">
+        <span className="font-semibold">Coach Report</span>
+        <span className="text-zinc-500">→</span>
       </Link>
     </main>
   );

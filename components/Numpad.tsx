@@ -10,147 +10,113 @@ interface NumpadProps {
 export default function Numpad({ value, onChange, onSubmit }: NumpadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the native input on mount so keyboard works immediately
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { if (value === "") inputRef.current?.focus(); }, [value]);
 
-  // Re-focus after each question (value resets to "")
-  useEffect(() => {
-    if (value === "") inputRef.current?.focus();
-  }, [value]);
-
-  // Physical keyboard handler — digits, operators, backspace, enter
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      onSubmit();
-    }
-    // Let the browser handle arrow keys, backspace, selection natively
+    if (e.key === "Enter") { e.preventDefault(); onSubmit(); }
   }
 
-  // Validate input: only allow digits, . / - in the field
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value;
-    // strip anything that isn't a digit, dot, slash, or leading minus
-    const cleaned = raw.replace(/[^0-9./\-]/g, "");
-    onChange(cleaned);
+    onChange(e.target.value.replace(/[^0-9./\-]/g, ""));
   }
 
-  // Numpad button press — inserts at cursor position in the native input
   function pressKey(key: string) {
     const el = inputRef.current;
     if (!el) return;
     el.focus();
 
     if (key === "⌫") {
-      const start = el.selectionStart ?? value.length;
-      const end   = el.selectionEnd   ?? value.length;
-      if (start !== end) {
-        // delete selection
-        const next = value.slice(0, start) + value.slice(end);
-        onChange(next);
-        requestAnimationFrame(() => el.setSelectionRange(start, start));
-      } else if (start > 0) {
-        const next = value.slice(0, start - 1) + value.slice(start);
-        onChange(next);
-        requestAnimationFrame(() => el.setSelectionRange(start - 1, start - 1));
+      const s  = el.selectionStart ?? value.length;
+      const e2 = el.selectionEnd   ?? value.length;
+      if (s !== e2) {
+        onChange(value.slice(0, s) + value.slice(e2));
+        requestAnimationFrame(() => el.setSelectionRange(s, s));
+      } else if (s > 0) {
+        onChange(value.slice(0, s - 1) + value.slice(s));
+        requestAnimationFrame(() => el.setSelectionRange(s - 1, s - 1));
       }
       return;
     }
-
     if (key === "↵") { onSubmit(); return; }
+    if (key === "←") {
+      requestAnimationFrame(() => {
+        const p = Math.max(0, (el.selectionStart ?? 0) - 1);
+        el.setSelectionRange(p, p);
+      });
+      return;
+    }
+    if (key === "→") {
+      requestAnimationFrame(() => {
+        const p = Math.min(value.length, (el.selectionStart ?? value.length) + 1);
+        el.setSelectionRange(p, p);
+      });
+      return;
+    }
 
-    // Insert at cursor
-    const start = el.selectionStart ?? value.length;
-    const end   = el.selectionEnd   ?? value.length;
-    const next  = value.slice(0, start) + key + value.slice(end);
-    onChange(next);
-    requestAnimationFrame(() => el.setSelectionRange(start + 1, start + 1));
+    const s  = el.selectionStart ?? value.length;
+    const e2 = el.selectionEnd   ?? value.length;
+    onChange(value.slice(0, s) + key + value.slice(e2));
+    requestAnimationFrame(() => el.setSelectionRange(s + 1, s + 1));
   }
 
-  const base = "flex items-center justify-center rounded-xl font-semibold text-xl select-none active:scale-95 transition-transform cursor-pointer h-14";
-  const num  = `${base} bg-zinc-800 hover:bg-zinc-700 text-white`;
-  const sym  = `${base} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`;
-  const del  = `${base} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`;
-  const ok   = `${base} font-bold text-black ${value ? "bg-emerald-400 hover:bg-emerald-300" : "bg-zinc-600 text-zinc-500 cursor-not-allowed"}`;
-
-  // Layout:
-  // Row 1: 7  8  9  ⌫
-  // Row 2: 4  5  6  /
-  // Row 3: 1  2  3  .
-  // Row 4: -  0  [Enter ×2]
-  const layout: { label: string; cls: string; key: string; span?: number }[][] = [
-    [
-      { label: "7", cls: num, key: "7" },
-      { label: "8", cls: num, key: "8" },
-      { label: "9", cls: num, key: "9" },
-      { label: "⌫", cls: del, key: "⌫" },
-    ],
-    [
-      { label: "4", cls: num, key: "4" },
-      { label: "5", cls: num, key: "5" },
-      { label: "6", cls: num, key: "6" },
-      { label: "/", cls: sym, key: "/" },
-    ],
-    [
-      { label: "1", cls: num, key: "1" },
-      { label: "2", cls: num, key: "2" },
-      { label: "3", cls: num, key: "3" },
-      { label: ".", cls: sym, key: "." },
-    ],
-    [
-      { label: "−", cls: sym, key: "-" },
-      { label: "0", cls: num, key: "0" },
-    ],
-  ];
+  const num = "flex items-center justify-center rounded-2xl text-2xl font-semibold select-none active:scale-95 transition-transform cursor-pointer h-[60px] bg-zinc-800/80 hover:bg-zinc-700 text-white border border-white/5";
+  const sym = "flex items-center justify-center rounded-2xl text-xl font-medium select-none active:scale-95 transition-transform cursor-pointer h-[60px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/5";
+  const nav = "flex items-center justify-center rounded-xl text-sm font-medium select-none active:scale-95 transition-transform cursor-pointer h-[42px] bg-zinc-900/60 hover:bg-zinc-800 text-zinc-500 border border-white/5 gap-1";
+  const ok  = `flex items-center justify-center rounded-2xl text-lg font-bold select-none active:scale-95 transition-transform cursor-pointer h-[60px] col-span-2 ${value ? "bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black" : "bg-zinc-800/40 text-zinc-600 cursor-not-allowed"}`;
 
   return (
-    <div className="w-full max-w-xs mx-auto">
-      {/* Native input — supports arrow keys, cursor, keyboard typing */}
+    <div className="w-full max-w-xs mx-auto space-y-2">
+      {/* Native input — arrow keys, cursor, physical keyboard all work */}
       <input
         ref={inputRef}
         type="text"
-        inputMode="none"        // suppress mobile keyboard — we show our own pad
+        inputMode="none"
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder="answer"
-        className="w-full mb-3 rounded-2xl bg-zinc-900 border border-zinc-700 px-4 py-3
+        placeholder="—"
+        className="w-full rounded-2xl bg-zinc-900 border border-zinc-700/50 px-5 py-4
                    text-right text-3xl font-mono text-white placeholder-zinc-700
-                   focus:outline-none focus:border-zinc-500 caret-emerald-400"
+                   focus:outline-none focus:border-zinc-500 caret-emerald-400 mb-1"
       />
 
-      {/* Numpad grid */}
-      <div className="space-y-2">
-        {layout.map((row, ri) => (
-          <div key={ri} className="grid gap-2" style={{ gridTemplateColumns: `repeat(4, 1fr)` }}>
-            {row.map(({ label, cls, key }) => (
-              <button
-                key={key}
-                className={cls}
-                onPointerDown={e => { e.preventDefault(); pressKey(key); }}
-              >
-                {label}
-              </button>
-            ))}
-            {/* last row: Enter spans remaining 2 columns */}
-            {ri === layout.length - 1 && (
-              <button
-                className={`${ok} col-span-2`}
-                onPointerDown={e => { e.preventDefault(); onSubmit(); }}
-                disabled={!value}
-              >
-                Enter ↵
-              </button>
-            )}
-          </div>
-        ))}
+      {/* Cursor navigation row (mobile) */}
+      <div className="grid grid-cols-2 gap-2">
+        <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("←"); }}>
+          ← move cursor
+        </button>
+        <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("→"); }}>
+          move cursor →
+        </button>
       </div>
 
-      <p className="text-center text-xs text-zinc-600 mt-2">
-        Use / for fractions (e.g. 3/4) · − for negatives · arrow keys to move cursor
-      </p>
+      {/* Numpad grid: 4 columns */}
+      <div className="grid grid-cols-4 gap-2">
+        {(["7","8","9"] as const).map(k =>
+          <button key={k} className={num} onPointerDown={e => { e.preventDefault(); pressKey(k); }}>{k}</button>
+        )}
+        <button className={sym} onPointerDown={e => { e.preventDefault(); pressKey("⌫"); }}>⌫</button>
+
+        {(["4","5","6"] as const).map(k =>
+          <button key={k} className={num} onPointerDown={e => { e.preventDefault(); pressKey(k); }}>{k}</button>
+        )}
+        <button className={sym} onPointerDown={e => { e.preventDefault(); pressKey("/"); }}>/</button>
+
+        {(["1","2","3"] as const).map(k =>
+          <button key={k} className={num} onPointerDown={e => { e.preventDefault(); pressKey(k); }}>{k}</button>
+        )}
+        <button className={sym} onPointerDown={e => { e.preventDefault(); pressKey("."); }}>.</button>
+
+        <button className={sym} onPointerDown={e => { e.preventDefault(); pressKey("-"); }}>−</button>
+        <button className={num} onPointerDown={e => { e.preventDefault(); pressKey("0"); }}>0</button>
+        <button
+          className={ok}
+          onPointerDown={e => { e.preventDefault(); if (value) onSubmit(); }}
+        >
+          Enter ↵
+        </button>
+      </div>
     </div>
   );
 }

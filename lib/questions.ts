@@ -16,6 +16,7 @@ export interface Question {
   answer: number | string;
   difficulty: Difficulty;
   inputType: "number" | "fraction";
+  subtext?: string; // shown below question for context
 }
 
 export const TARGET_TIMES: Record<Difficulty, number> = {
@@ -212,9 +213,9 @@ function genFracDec(d: Difficulty): Question {
     : FRAC_DEC_TABLE;
   const [frac, dec] = pick(pool);
   if (Math.random() < 0.5) {
-    return { text: `${frac} = ?`, answer: dec, difficulty: d, inputType: "number" };
+    return { text: `${frac}`, answer: dec, difficulty: d, inputType: "number", subtext: "as decimal" };
   } else {
-    return { text: `${dec} = ? (fraction)`, answer: frac, difficulty: d, inputType: "fraction" };
+    return { text: `${dec}`, answer: frac, difficulty: d, inputType: "fraction", subtext: "as fraction" };
   }
 }
 

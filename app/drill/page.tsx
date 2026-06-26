@@ -238,63 +238,98 @@ function DrillInner() {
   }
 
   // ── Active drill ───────────────────────────────────────────────────────────
-  const bg = feedback === "correct" ? "bg-emerald-950" : feedback === "wrong" ? "bg-red-950" : "bg-zinc-950";
+  const feedbackBg =
+    feedback === "correct" ? "bg-emerald-500/10 border-emerald-500/20" :
+    feedback === "wrong"   ? "bg-red-500/10 border-red-500/20" : "";
 
   return (
-    <main className={`max-w-md mx-auto min-h-screen px-4 pt-6 pb-6 transition-colors duration-300 ${bg}`}>
-      {/* header */}
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={() => finishSession()} className="text-zinc-500 text-sm">
-          {phase === "paused" ? "quit" : "end"}
+    <main className="max-w-md mx-auto min-h-screen px-4 flex flex-col" style={{ paddingTop: "env(safe-area-inset-top, 16px)" }}>
+
+      {/* ── Header bar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between py-4 mb-2">
+        {/* End / quit button */}
+        <button
+          onClick={() => finishSession()}
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-lg"
+          title="End session"
+        >
+          ✕
         </button>
-        <div className="flex items-center gap-3">
-          {durSecs && <Timer totalSecs={durSecs} onExpire={handleExpire} running={phase === "running"} />}
-          <span className="text-zinc-500 text-sm">Q{qCount + 1}</span>
+
+        {/* Timer + counter pill */}
+        <div className="flex items-center gap-2 bg-zinc-900 rounded-full px-4 py-1.5 border border-zinc-800">
+          {durSecs
+            ? <Timer totalSecs={durSecs} onExpire={handleExpire} running={phase === "running"} />
+            : <span className="text-zinc-400 text-sm font-mono">∞</span>
+          }
+          <span className="text-zinc-600 text-xs">·</span>
+          <span className="text-zinc-400 text-sm">Q{qCount + (feedback ? 0 : 1)}</span>
         </div>
-        <button onClick={togglePause} className="text-zinc-500 text-sm">
-          {phase === "paused" ? "▶ resume" : "⏸"}
+
+        {/* Pause button */}
+        <button
+          onClick={togglePause}
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-base"
+          title={phase === "paused" ? "Resume" : "Pause"}
+        >
+          {phase === "paused" ? "▶" : "⏸"}
         </button>
       </div>
 
+      {/* ── Paused state ───────────────────────────────────────────────────── */}
       {phase === "paused" && (
-        <div className="text-center py-16 text-zinc-400 text-lg">Paused</div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+          <div className="text-5xl">⏸</div>
+          <p className="text-zinc-400 text-lg">Paused</p>
+          <button
+            onClick={togglePause}
+            className="bg-zinc-800 hover:bg-zinc-700 rounded-2xl px-8 py-3 font-semibold transition-colors"
+          >
+            ▶ Resume
+          </button>
+        </div>
       )}
 
+      {/* ── Active question ─────────────────────────────────────────────────── */}
       {phase === "running" && current && (
-        <>
-          {/* skill label */}
-          <p className="text-xs text-zinc-500 uppercase tracking-widest mb-4">
-            {SKILL_LABELS[current.skillId]}
-          </p>
-
-          {/* question — break-all prevents / in fractions from overflowing */}
-          <div className="text-4xl font-bold mb-2 leading-snug min-h-[3rem] break-all">
-            {current.q.text.split("/").map((part, i, arr) =>
-              i < arr.length - 1
-                ? <span key={i}>{part}<span className="text-zinc-300">/</span></span>
-                : <span key={i}>{part}</span>
-            )}
-            <span className="text-zinc-600"> = ?</span>
+        <div className="flex-1 flex flex-col">
+          {/* Skill badge */}
+          <div className="mb-5">
+            <span className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">
+              {SKILL_LABELS[current.skillId]}
+            </span>
           </div>
 
-          {/* feedback */}
-          {feedback && (
-            <div className={`mb-4 text-sm ${feedback === "correct" ? "text-emerald-400" : "text-red-400"}`}>
-              {feedback === "correct" ? "✓ correct" : `✗  answer: ${current.q.answer}`}
-              {tip && <div className="text-zinc-400 mt-1">Tip → {tip}</div>}
+          {/* Question */}
+          <div className="mb-1">
+            <div className="text-[2.8rem] font-bold leading-tight tracking-tight text-white">
+              {current.q.text}
             </div>
-          )}
+            {current.q.subtext && (
+              <div className="text-sm text-zinc-500 mt-1">{current.q.subtext}</div>
+            )}
+          </div>
 
-          {/* spacer when no feedback */}
-          {!feedback && <div className="mb-8" />}
+          {/* Feedback band */}
+          <div className={`rounded-2xl px-4 py-3 mb-4 mt-2 border transition-all duration-200 min-h-[52px] ${feedbackBg}`}>
+            {feedback === "correct" && (
+              <span className="text-emerald-400 font-semibold">✓ Correct</span>
+            )}
+            {feedback === "wrong" && (
+              <div>
+                <span className="text-red-400 font-semibold">✗ </span>
+                <span className="text-zinc-300">Answer: </span>
+                <span className="text-white font-mono font-bold">{String(current.q.answer)}</span>
+                {tip && <div className="text-zinc-400 text-xs mt-1.5">{tip}</div>}
+              </div>
+            )}
+          </div>
 
-          {/* numpad */}
-          <Numpad
-            value={input}
-            onChange={setInput}
-            onSubmit={handleSubmit}
-          />
-        </>
+          {/* Numpad */}
+          <div className="mt-auto pb-4">
+            <Numpad value={input} onChange={setInput} onSubmit={handleSubmit} />
+          </div>
+        </div>
       )}
     </main>
   );
