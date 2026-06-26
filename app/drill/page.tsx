@@ -11,6 +11,7 @@ import {
   loadData, saveData, recordAttempt, recordSession, PerfData,
 } from "@/lib/tracker";
 import { pickNext, updateDifficulty, resetSessionState } from "@/lib/engine";
+import { pushToCloud } from "@/lib/sync";
 
 type Phase = "focus-pick" | "running" | "paused" | "done";
 
@@ -124,6 +125,7 @@ function DrillInner() {
     const avgTime = all.length ? all.reduce((s, a) => s + a.elapsed, 0) / all.length : 0;
     recordSession(dataRef.current, { mode, n: all.length, correct, avgTime });
     saveData(dataRef.current);
+    pushToCloud(dataRef.current); // fire-and-forget, offline-safe
     setPhase("done");
   }
 

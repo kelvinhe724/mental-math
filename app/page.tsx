@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { loadData, totalQuestions } from "@/lib/tracker";
+import { loadData, saveData, totalQuestions } from "@/lib/tracker";
 import { optiverProjection } from "@/lib/engine";
+import { pullFromCloud, mergeData, getLastSync } from "@/lib/sync";
 
 const MODES = [
   { label: "Blitz",       sub: "1 min",        href: "/drill?mode=adaptive&secs=60",  color: "bg-violet-700 hover:bg-violet-600 active:bg-violet-800" },
@@ -14,18 +15,46 @@ const MODES = [
 ];
 
 export default function Home() {
-  const [total, setTotal] = useState<number | null>(null);
-  const [proj,  setProj]  = useState<{ projectedScore: number } | null>(null);
+  const [total,    setTotal]    = useState<number | null>(null);
+  const [proj,     setProj]     = useState<{ projectedScore: number } | null>(null);
+  const [syncing,  setSyncing]  = useState(true);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   useEffect(() => {
-    const data = loadData();
-    setTotal(totalQuestions(data));
-    setProj(optiverProjection(data));
+    async function init() {
+      let local = loadData();
+
+      // Pull from cloud and merge on every load
+      const cloud = await pullFromCloud();
+      if (cloud) {
+        local = mergeData(local, cloud);
+        saveData(local);
+      }
+
+      setTotal(totalQuestions(local));
+      setProj(optiverProjection(local));
+      setLastSync(getLastSync());
+      setSyncing(false);
+    }
+    init();
   }, []);
+
+  function fmtSync(ts: string | null) {
+    if (!ts) return "never synced";
+    const diff = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+    if (diff < 1)  return "synced just now";
+    if (diff < 60) return `synced ${diff}m ago`;
+    return `synced ${Math.round(diff / 60)}h ago`;
+  }
 
   return (
     <main className="max-w-md mx-auto px-4 pt-10 pb-8">
-      <h1 className="text-3xl font-bold mb-1">Mental Math</h1>
+      <div className="flex items-start justify-between mb-1">
+        <h1 className="text-3xl font-bold">Mental Math</h1>
+        <span className="text-xs text-zinc-600 mt-2">
+          {syncing ? "syncing…" : fmtSync(lastSync)}
+        </span>
+      </div>
       <p className="text-zinc-400 text-sm mb-6">Adaptive quant interview prep</p>
 
       {/* stats strip */}

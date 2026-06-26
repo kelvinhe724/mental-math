@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { loadData, saveData, allSkillStats, deleteSession, resetAllData, PerfData, SessionSummary } from "@/lib/tracker";
+import { loadData, saveData, allSkillStats, deleteSession, resetAllData, PerfData } from "@/lib/tracker";
 import { getWeaknessRanking, optiverProjection } from "@/lib/engine";
 import { SKILL_LABELS, SKILL_IDS, TARGET_TIMES, getRandomTip } from "@/lib/questions";
+import { getUserId, setSyncCode, pullFromCloud, pushToCloud, mergeData } from "@/lib/sync";
 
 const MASTERY_ACC  = 0.92;
 const WEAK_ACC     = 0.75;
@@ -31,9 +32,39 @@ export default function Dashboard() {
   const [showSessions,   setShowSessions]   = useState(false);
   const [confirmReset,   setConfirmReset]   = useState(false);
   const [deleteIdx,      setDeleteIdx]      = useState<number | null>(null);
+  const [syncCode,       setSyncCodeState]  = useState("");
+  const [myId,           setMyId]           = useState("");
+  const [syncInput,      setSyncInput]      = useState("");
+  const [syncMsg,        setSyncMsg]        = useState("");
+  const [copied,         setCopied]         = useState(false);
 
-  useEffect(() => { setData(loadData()); }, []);
+  useEffect(() => {
+    setData(loadData());
+    setMyId(getUserId());
+  }, []);
   if (!data) return null;
+
+  async function handleLinkDevice() {
+    if (!syncInput.trim()) return;
+    setSyncMsg("Pulling data…");
+    const cloud = await pullFromCloud(syncInput.trim().toLowerCase());
+    if (!cloud) { setSyncMsg("No data found for that code."); return; }
+    setSyncCode(syncInput.trim().toLowerCase());
+    setMyId(syncInput.trim().toLowerCase());
+    const local   = loadData();
+    const merged  = mergeData(local, cloud);
+    saveData(merged);
+    setData(merged);
+    await pushToCloud(merged);
+    setSyncMsg("Linked! Data merged from other device.");
+    setSyncInput("");
+  }
+
+  function copyId() {
+    navigator.clipboard.writeText(myId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   const stats   = allSkillStats(data);
   const ranking = getWeaknessRanking(data);
@@ -210,6 +241,39 @@ export default function Dashboard() {
             })}
           </div>
         )}
+      </section>
+
+      {/* Sync */}
+      <section className="mb-6 border-t border-zinc-800 pt-6">
+        <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Sync Between Devices</h2>
+        <div className="bg-zinc-900 rounded-2xl p-4 mb-3">
+          <p className="text-xs text-zinc-500 mb-2">Your sync code — paste this on your other device</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs text-zinc-300 bg-zinc-800 rounded-lg px-3 py-2 break-all font-mono">
+              {myId || "loading…"}
+            </code>
+            <button onClick={copyId}
+              className="text-xs bg-zinc-700 hover:bg-zinc-600 rounded-lg px-3 py-2 whitespace-nowrap transition-colors">
+              {copied ? "Copied ✓" : "Copy"}
+            </button>
+          </div>
+        </div>
+        <div className="bg-zinc-900 rounded-2xl p-4">
+          <p className="text-xs text-zinc-500 mb-2">Got a sync code from another device? Paste it here</p>
+          <div className="flex gap-2">
+            <input
+              value={syncInput}
+              onChange={e => setSyncInput(e.target.value)}
+              placeholder="paste sync code…"
+              className="flex-1 text-xs bg-zinc-800 rounded-lg px-3 py-2 font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            />
+            <button onClick={handleLinkDevice}
+              className="text-xs bg-blue-700 hover:bg-blue-600 rounded-lg px-3 py-2 transition-colors whitespace-nowrap">
+              Link
+            </button>
+          </div>
+          {syncMsg && <p className="text-xs text-zinc-400 mt-2">{syncMsg}</p>}
+        </div>
       </section>
 
       {/* Reset */}
