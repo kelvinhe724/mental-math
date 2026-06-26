@@ -210,7 +210,38 @@ export default function Dashboard() {
   const [copied,        setCopied]        = useState(false);
 
   useEffect(() => { setData(loadData()); setMyId(getUserId()); }, []);
-  if (!data) return null;
+
+  // All derived state must live ABOVE the early return — hooks cannot be called
+  // conditionally, and the useMemo below would violate that rule if placed after.
+  const stats      = data ? allSkillStats(data)       : null;
+  const ranking    = data ? getWeaknessRanking(data)  : [];
+  const proj       = data ? optiverProjection(data)   : null;
+
+  const weaknesses = ranking
+    .filter(r =>
+      r.stats.n >= 3 && (
+        r.stats.accuracy! < WEAK_ACC ||
+        r.stats.avgTime!  > TARGET_TIMES.medium * SLOW_MULT
+      )
+    )
+    .slice(0, 3);
+
+  const mastered = ranking.filter(r =>
+    r.stats.n >= 3 &&
+    r.stats.accuracy! >= MASTERY_ACC &&
+    r.stats.avgTime!  <= TARGET_TIMES.medium * MASTERY_MULT
+  );
+
+  const weaknessTips = useMemo(
+    () => Object.fromEntries(weaknesses.map(({ skillId }) => [skillId, getRandomTip(skillId)])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weaknesses.map(w => w.skillId).join(",")]
+  );
+
+  const validSessions = data ? data.sessions.filter(s => s.n > 0) : [];
+  const sessions      = [...validSessions].reverse();
+
+  if (!data || !stats) return null;
 
   async function handleLinkDevice() {
     if (!syncInput.trim()) return;
@@ -246,35 +277,6 @@ export default function Dashboard() {
     setData(resetAllData());
     setConfirmReset(false);
   }
-
-  const stats    = allSkillStats(data);
-  const ranking  = getWeaknessRanking(data);
-  const proj     = optiverProjection(data);
-
-  const weaknesses = ranking
-    .filter(r =>
-      r.stats.n >= 3 && (
-        r.stats.accuracy! < WEAK_ACC ||
-        r.stats.avgTime!  > TARGET_TIMES.medium * SLOW_MULT
-      )
-    )
-    .slice(0, 3);
-
-  const mastered = ranking.filter(r =>
-    r.stats.n >= 3 &&
-    r.stats.accuracy! >= MASTERY_ACC &&
-    r.stats.avgTime!  <= TARGET_TIMES.medium * MASTERY_MULT
-  );
-
-  // Memoize tips so they don't randomize on every re-render
-  const weaknessTips = useMemo(
-    () => Object.fromEntries(weaknesses.map(({ skillId }) => [skillId, getRandomTip(skillId)])),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [weaknesses.map(w => w.skillId).join(",")]
-  );
-
-  const validSessions = data.sessions.filter(s => s.n > 0);
-  const sessions      = [...validSessions].reverse();
 
   return (
     <main className="max-w-md mx-auto px-4 pt-8 pb-16">
