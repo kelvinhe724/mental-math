@@ -265,9 +265,13 @@ function DrillInner() {
             {SKILL_LABELS[current.skillId]}
           </p>
 
-          {/* question */}
-          <div className="text-4xl font-bold mb-2 leading-tight min-h-[3rem]">
-            {current.q.text}
+          {/* question — break-all prevents / in fractions from overflowing */}
+          <div className="text-4xl font-bold mb-2 leading-snug min-h-[3rem] break-all">
+            {current.q.text.split("/").map((part, i, arr) =>
+              i < arr.length - 1
+                ? <span key={i}>{part}<span className="text-zinc-300">/</span></span>
+                : <span key={i}>{part}</span>
+            )}
             <span className="text-zinc-600"> = ?</span>
           </div>
 
@@ -287,9 +291,6 @@ function DrillInner() {
             value={input}
             onChange={setInput}
             onSubmit={handleSubmit}
-            allowFraction={current.q.inputType === "fraction"}
-            allowDecimal={true}
-            allowNegative={true}
           />
         </>
       )}
