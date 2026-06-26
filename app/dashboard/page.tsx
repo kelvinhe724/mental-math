@@ -1,93 +1,237 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  loadData, saveData, allSkillStats, deleteSession, resetAllData, PerfData,
+  loadData, saveData, allSkillStats, skillStats, deleteSession,
+  resetAllData, PerfData, SkillStats, totalQuestions,
 } from "@/lib/tracker";
-import { getWeaknessRanking, optiverProjection } from "@/lib/engine";
 import {
-  SKILL_LABELS, SKILL_IDS, SkillId, TARGET_TIMES, getRandomTip,
-} from "@/lib/questions";
+  getWeaknessRanking, optiverProjection, sessionProjections,
+  OptiverProjection,
+} from "@/lib/engine";
+import { SKILL_LABELS, SKILL_IDS, SkillId, TARGET_TIMES, TIPS } from "@/lib/questions";
 import { getUserId, setSyncCode, pullFromCloud, pushToCloud, mergeData } from "@/lib/sync";
 
-const MASTERY_ACC  = 0.92;
+// ── Constants ─────────────────────────────────────────────────────────────────
+const MASTERY_ACC  = 0.90;
 const WEAK_ACC     = 0.75;
-const SLOW_MULT    = 1.5;
-const MASTERY_MULT = 1.15;
+const SLOW_MULT    = 1.4;
 
-// ── Score Block (replaces arc gauge hero-metric template) ──────────────────────
-function ScoreBlock({ score, max = 80, speed, acc, answerable }: {
-  score: number; max?: number; speed: number; acc: number; answerable: number;
-}) {
-  const pct        = Math.min(score / max, 1) * 100;
-  const targetPct  = (70 / max) * 100;
-  const scoreColor = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
-  const trackColor = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#ef4444";
+// ── Score color ───────────────────────────────────────────────────────────────
+function scoreColor(s: number): string {
+  if (s >= 70) return "#f59e0b"; // gold — target achieved
+  if (s >= 55) return "#10b981"; // green — competitive
+  if (s >= 35) return "#60a5fa"; // blue — developing
+  return "#ef4444";              // red — early stage
+}
+function scoreLabel(s: number): string {
+  if (s >= 70) return "Target";
+  if (s >= 55) return "Competitive";
+  if (s >= 35) return "Developing";
+  return "Early stage";
+}
+
+// ── Count-up animation ────────────────────────────────────────────────────────
+function useCountUp(target: number, duration = 900) {
+  const [val, setVal] = useState(0);
+  const frame = useRef<number>(0);
+  useEffect(() => {
+    setVal(0);
+    const start = Date.now();
+    const animate = () => {
+      const t = Math.min((Date.now() - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setVal(Math.round(eased * target));
+      if (t < 1) frame.current = requestAnimationFrame(animate);
+    };
+    frame.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame.current);
+  }, [target, duration]);
+  return val;
+}
+
+// ── Score Hero ─────────────────────────────────────────────────────────────────
+function ScoreHero({ proj }: { proj: OptiverProjection }) {
+  const animScore = useCountUp(proj.projectedScore);
+  const col       = scoreColor(proj.projectedScore);
+  const pct       = (proj.projectedScore / 80) * 100;
+
+  const milestones = [
+    { score: 35, label: "35", title: "Developing" },
+    { score: 55, label: "55", title: "Competitive" },
+    { score: 70, label: "70", title: "Target" },
+  ];
 
   return (
     <div className="mb-10">
-      {/* Score line */}
-      <div className="flex items-baseline gap-2.5 mb-3">
-        <span className="text-6xl font-bold font-mono tabular-nums leading-none"
-          style={{ color: scoreColor }}>
-          {score}
+      {/* Score numeral */}
+      <div className="flex items-baseline gap-2 mb-1">
+        <span className="text-[72px] font-bold font-mono tabular-nums leading-none"
+          style={{ color: col }}>
+          {animScore}
         </span>
-        <span className="text-zinc-600 text-xl">/80</span>
-        <span className="text-zinc-600 text-xs ml-1 self-center">Optiver estimate</span>
+        <span className="text-zinc-600 text-2xl font-light">/80</span>
+      </div>
+      <div className="flex items-center gap-3 mb-5">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full border"
+          style={{ color: col, borderColor: col + "55", background: col + "18" }}>
+          {scoreLabel(proj.projectedScore)}
+        </span>
+        <span className="text-xs text-zinc-600">Optiver 80-in-8 estimate</span>
       </div>
 
-      {/* Horizontal track */}
-      <div className="relative h-1 bg-zinc-800 rounded-full mb-1">
-        <div className="absolute left-0 top-0 h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, background: trackColor }} />
-        {/* Target notch at 70 */}
-        <div className="absolute top-[-4px] w-px h-[9px] bg-zinc-500"
-          style={{ left: `${targetPct}%` }} />
+      {/* Track */}
+      <div className="relative h-1.5 bg-zinc-800 rounded-full mb-1.5">
+        {/* Filled bar */}
+        <div className="absolute left-0 top-0 h-full rounded-full transition-all duration-1000"
+          style={{ width: `${pct}%`, background: col }} />
+        {/* Milestone ticks */}
+        {milestones.map(m => (
+          <div key={m.score}
+            className="absolute top-[-4px] w-px h-[10px] bg-zinc-600"
+            style={{ left: `${(m.score / 80) * 100}%` }}
+          />
+        ))}
       </div>
-      <div className="flex justify-between text-[10px] text-zinc-700 mb-4">
-        <span>0</span>
-        <span>target 70</span>
-        <span>80</span>
+      <div className="relative h-4 mb-5">
+        {milestones.map(m => (
+          <span key={m.score}
+            className="absolute text-[9px] text-zinc-700 -translate-x-1/2"
+            style={{ left: `${(m.score / 80) * 100}%` }}>
+            {m.label}
+          </span>
+        ))}
       </div>
 
-      {/* Sub-stats row */}
-      <div className="flex gap-6">
-        <div>
-          <span className="font-mono tabular-nums font-semibold text-zinc-200 text-sm">{speed.toFixed(1)}s</span>
-          <span className="text-zinc-600 text-xs ml-1.5">per q</span>
+      {/* Stats row */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: "speed",      val: `${proj.avgSpeed.toFixed(1)}s` },
+          { label: "accuracy",   val: `${Math.round(proj.avgAcc * 100)}%` },
+          { label: "answerable", val: String(proj.answerable) },
+          { label: "skills",     val: `${proj.coveredSkills}/8` },
+        ].map(({ label, val }) => (
+          <div key={label} className="bg-zinc-900/60 rounded-xl p-2.5 border border-zinc-800/60 text-center">
+            <div className="font-mono tabular-nums font-semibold text-zinc-100 text-sm">{val}</div>
+            <div className="text-[9px] text-zinc-600 mt-0.5">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Confidence indicator */}
+      <div className="mt-3 flex items-center gap-2">
+        <div className="flex-1 h-0.5 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="h-full bg-zinc-600 rounded-full transition-all duration-700"
+            style={{ width: `${proj.confidence * 100}%` }} />
         </div>
-        <div>
-          <span className="font-mono tabular-nums font-semibold text-zinc-200 text-sm">{Math.round(acc * 100)}%</span>
-          <span className="text-zinc-600 text-xs ml-1.5">accuracy</span>
+        <span className="text-[9px] text-zinc-700 shrink-0">
+          {Math.round(proj.confidence * 100)}% confidence · {proj.totalAttempts} attempts
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Trajectory Chart ───────────────────────────────────────────────────────────
+function TrajectoryChart({ points }: {
+  points: Array<{ ts: string; score: number; cumulativeN: number }>;
+}) {
+  if (points.length < 2) return (
+    <div className="border border-zinc-800/60 rounded-2xl px-4 py-6 text-center text-xs text-zinc-600 mb-10">
+      Complete more sessions to see your progress trajectory
+    </div>
+  );
+
+  const W = 300, H = 80;
+  const pad = { t: 10, r: 10, b: 20, l: 28 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+
+  const xOf = (i: number) => pad.l + (i / (points.length - 1)) * iW;
+  const yOf = (s: number) => H - pad.b - (s / 80) * iH;
+
+  const pathD = points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${xOf(i).toFixed(1)},${yOf(p.score).toFixed(1)}`)
+    .join(" ");
+
+  const milestones = [
+    { v: 35, c: "#ef4444" }, { v: 55, c: "#10b981" }, { v: 70, c: "#f59e0b" },
+  ];
+
+  return (
+    <div className="mb-10">
+      <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/60 px-3 pt-3 pb-2">
+        <div className="flex justify-between px-1 mb-1">
+          <span className="text-[10px] text-zinc-600">score trajectory</span>
+          <span className="text-[10px] text-zinc-700">{points.length} sessions</span>
         </div>
-        <div>
-          <span className="font-mono tabular-nums font-semibold text-zinc-200 text-sm">{answerable}</span>
-          <span className="text-zinc-600 text-xs ml-1.5">answerable</span>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 90 }}>
+          {/* Milestone lines */}
+          {milestones.map(m => {
+            const y = yOf(m.v);
+            if (y < pad.t || y > H - pad.b) return null;
+            return (
+              <g key={m.v}>
+                <line x1={pad.l} y1={y} x2={W - pad.r} y2={y}
+                  stroke={m.c} strokeWidth={0.5} strokeDasharray="2,3" opacity={0.35} />
+                <text x={pad.l - 4} y={y + 3} textAnchor="end"
+                  fill={m.c} fontSize={7} opacity={0.5}>{m.v}</text>
+              </g>
+            );
+          })}
+          {/* Area fill */}
+          <defs>
+            <linearGradient id="traj-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path
+            d={`${pathD} L${xOf(points.length - 1).toFixed(1)},${H - pad.b} L${xOf(0).toFixed(1)},${H - pad.b} Z`}
+            fill="url(#traj-fill)"
+          />
+          {/* Line */}
+          <path d={pathD} fill="none" stroke="#10b981" strokeWidth={1.5}
+            strokeLinejoin="round" strokeLinecap="round" />
+          {/* Dots */}
+          {points.map((p, i) => {
+            const x = xOf(i), y = yOf(p.score);
+            const c = scoreColor(p.score);
+            const isLast = i === points.length - 1;
+            return (
+              <g key={i}>
+                <circle cx={x} cy={y} r={isLast ? 4 : 2.5}
+                  fill={c} stroke="#09090b" strokeWidth={isLast ? 1.5 : 1} />
+                {isLast && (
+                  <circle cx={x} cy={y} r={7} fill="none" stroke={c} strokeWidth={0.5} opacity={0.4} />
+                )}
+                <title>{new Date(p.ts).toLocaleDateString()} · Est. {p.score}/80 · {p.cumulativeN} total attempts</title>
+              </g>
+            );
+          })}
+        </svg>
+        <div className="flex justify-between text-[9px] text-zinc-700 mt-0.5 px-1">
+          <span>{new Date(points[0].ts).toLocaleDateString()}</span>
+          <span>{new Date(points[points.length - 1].ts).toLocaleDateString()}</span>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Radar Chart ────────────────────────────────────────────────────────────────
+// ── Radar ──────────────────────────────────────────────────────────────────────
 const ABBR: Record<SkillId, string> = {
-  add_sub:    "+/−",
-  mul_1d:     "×1d",
-  mul_2d:     "×2d",
-  div:        "÷",
-  percent:    "%",
-  frac_arith: "fracs",
-  frac_dec:   "f↔d",
-  mixed:      "mix",
+  add_sub:    "+/−", mul_1d: "×1d", mul_2d: "×2d", div: "÷",
+  percent:    "%",   frac_arith: "fracs", frac_dec: "f↔d", mixed: "mix",
 };
 
-type StatsMap = Record<SkillId, { accuracy: number | null; avgTime: number | null; n: number }>;
-
-function RadarChart({ stats }: { stats: StatsMap }) {
+function Radar({ stats, onSelect, selected }: {
+  stats: Record<SkillId, SkillStats>;
+  onSelect: (id: SkillId | null) => void;
+  selected: SkillId | null;
+}) {
   const N = SKILL_IDS.length;
   const cx = 110, cy = 110, maxR = 78;
   const angles = SKILL_IDS.map((_, i) => (i * 2 * Math.PI) / N - Math.PI / 2);
-  const levels = [0.25, 0.5, 0.75, 1.0];
 
   function pt(i: number, r: number): [number, number] {
     return [cx + r * Math.cos(angles[i]), cy + r * Math.sin(angles[i])];
@@ -98,154 +242,409 @@ function RadarChart({ stats }: { stats: StatsMap }) {
 
   const accPts = SKILL_IDS.map((id, i) => pt(i, (stats[id]?.accuracy ?? 0) * maxR));
   const fillPoly = accPts.map(p => p.join(",")).join(" ");
+  const levels = [0.25, 0.5, 0.75, 1.0];
 
   return (
-    <div className="mb-10">
-      <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 p-3">
-        {/* Caption inside card — not an eyebrow header above it */}
-        <div className="flex justify-between px-1 mb-1">
-          <span className="text-[10px] text-zinc-700">skill profile</span>
-          <span className="text-[10px] text-zinc-700">8 skills</span>
-        </div>
-        <svg viewBox="0 0 220 220" className="w-full max-w-[220px] mx-auto">
-          {levels.map(l => (
-            <polygon key={l} points={gridPoly(l * maxR)} fill="none"
-              stroke={l === 1 ? "#3f3f46" : "#27272a"}
-              strokeWidth={l === 1 ? 1 : 0.5}
+    <svg viewBox="0 0 220 220" className="w-full max-w-[240px] mx-auto">
+      {/* Grid rings */}
+      {levels.map(l => (
+        <polygon key={l} points={gridPoly(l * maxR)} fill="none"
+          stroke={l === 1 ? "#3f3f46" : "#27272a"}
+          strokeWidth={l === 1 ? 1 : 0.5}
+        />
+      ))}
+      {/* Spokes */}
+      {SKILL_IDS.map((_, i) => {
+        const [x, y] = pt(i, maxR);
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#27272a" strokeWidth={0.5} />;
+      })}
+      {/* Fill */}
+      <polygon points={fillPoly}
+        fill={selected ? "rgba(16,185,129,0.05)" : "rgba(16,185,129,0.10)"}
+        stroke="#10b981" strokeWidth={1.5}
+      />
+      {/* Dots */}
+      {accPts.map(([x, y], i) => {
+        const id  = SKILL_IDS[i];
+        const acc = stats[id]?.accuracy ?? 0;
+        const c   = acc >= 0.9 ? "#10b981" : acc >= 0.75 ? "#f59e0b" : acc > 0 ? "#ef4444" : "#3f3f46";
+        const isSelected = selected === id;
+        return (
+          <g key={id} onClick={() => onSelect(isSelected ? null : id)} className="cursor-pointer">
+            <circle cx={x} cy={y} r={isSelected ? 5 : 3.5}
+              fill={c} stroke="#0a0a0e" strokeWidth={isSelected ? 2 : 1.5}
             />
-          ))}
-          {SKILL_IDS.map((_, i) => {
-            const [x, y] = pt(i, maxR);
-            return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#27272a" strokeWidth={0.5} />;
-          })}
-          <polygon points={fillPoly} fill="rgba(16,185,129,0.1)" stroke="#10b981" strokeWidth={1.5} />
-          {accPts.map(([x, y], i) => {
-            const acc = stats[SKILL_IDS[i]]?.accuracy ?? 0;
-            const c = acc >= 0.9 ? "#10b981" : acc >= 0.75 ? "#f59e0b" : acc > 0 ? "#ef4444" : "#3f3f46";
-            return (
-              <circle key={i} cx={x} cy={y} r={3.5}
-                fill={c} stroke="#0a0a0e" strokeWidth={1.5}
-              />
-            );
-          })}
-          {SKILL_IDS.map((id, i) => {
-            const [x, y] = pt(i, maxR + 17);
-            return (
-              <text key={id} x={x} y={y}
-                textAnchor="middle" dominantBaseline="middle"
-                fill="#52525b" fontSize={8} fontWeight="500">
-                {ABBR[id]}
-              </text>
-            );
-          })}
-        </svg>
-      </div>
+            {isSelected && (
+              <circle cx={x} cy={y} r={9} fill="none" stroke={c} strokeWidth={0.8} opacity={0.4} />
+            )}
+          </g>
+        );
+      })}
+      {/* Labels */}
+      {SKILL_IDS.map((id, i) => {
+        const [x, y] = pt(i, maxR + 17);
+        const isSelected = selected === id;
+        return (
+          <text key={id} x={x} y={y}
+            textAnchor="middle" dominantBaseline="middle"
+            fill={isSelected ? "#d4d4d8" : "#52525b"}
+            fontSize={isSelected ? 9 : 8} fontWeight={isSelected ? "600" : "500"}>
+            {ABBR[id]}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ── Skill Table ────────────────────────────────────────────────────────────────
+function SkillTable({ stats, onDrill }: {
+  stats: Record<SkillId, SkillStats>;
+  onDrill: (id: SkillId) => void;
+}) {
+  const [expanded, setExpanded] = useState<SkillId | null>(null);
+  const tgt = TARGET_TIMES.medium;
+
+  return (
+    <div className="space-y-1.5 mb-10">
+      {SKILL_IDS.map(id => {
+        const s       = stats[id];
+        const hasData = s.n > 0;
+        const acc     = s.accuracy ?? 0;
+        const dotColor = !hasData ? "#3f3f46"
+          : acc >= MASTERY_ACC ? "#10b981"
+          : acc >= WEAK_ACC    ? "#f59e0b"
+          :                      "#ef4444";
+        const isSlow   = hasData && s.avgTime! > tgt * SLOW_MULT;
+        const isOpen   = expanded === id;
+
+        return (
+          <div key={id} className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl overflow-hidden">
+            {/* Row */}
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-left group"
+              onClick={() => setExpanded(isOpen ? null : id)}>
+              {/* Status dot */}
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} />
+              {/* Name */}
+              <span className="text-sm font-medium text-zinc-200 flex-1 truncate">
+                {SKILL_LABELS[id]}
+              </span>
+              {/* Accuracy bar */}
+              {hasData ? (
+                <div className="shrink-0 w-16 flex items-center gap-1.5">
+                  <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full"
+                      style={{ width: `${Math.round(acc * 100)}%`, background: dotColor }} />
+                  </div>
+                  <span className="text-xs font-mono tabular-nums text-zinc-400 w-8 text-right">
+                    {Math.round(acc * 100)}%
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xs text-zinc-700 shrink-0">no data</span>
+              )}
+              {/* Speed */}
+              {hasData && (
+                <span className={`text-xs font-mono tabular-nums shrink-0 w-10 text-right ${
+                  isSlow ? "text-red-400" : "text-zinc-500"
+                }`}>
+                  {s.avgTime!.toFixed(1)}s
+                </span>
+              )}
+              {/* Chevron */}
+              <span className="text-zinc-700 text-xs shrink-0 ml-1 group-hover:text-zinc-500 transition-colors">
+                {isOpen ? "▲" : "▼"}
+              </span>
+            </button>
+
+            {/* Expanded detail */}
+            {isOpen && (
+              <div className="border-t border-zinc-800/60 px-3 py-3 space-y-3">
+                {!hasData ? (
+                  <p className="text-xs text-zinc-600">No attempts yet. Start an adaptive drill to see stats here.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="text-center">
+                        <div className="text-base font-mono font-bold" style={{ color: dotColor }}>
+                          {Math.round(acc * 100)}%
+                        </div>
+                        <div className="text-[9px] text-zinc-600">accuracy</div>
+                      </div>
+                      <div className="text-center">
+                        <div className={`text-base font-mono font-bold ${isSlow ? "text-red-400" : "text-zinc-200"}`}>
+                          {s.avgTime!.toFixed(1)}s
+                        </div>
+                        <div className="text-[9px] text-zinc-600">avg speed</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-base font-mono font-bold text-zinc-300">{s.n}</div>
+                        <div className="text-[9px] text-zinc-600">attempts</div>
+                      </div>
+                    </div>
+                    {/* Speed indicator */}
+                    <div>
+                      <div className="flex justify-between text-[9px] text-zinc-700 mb-1">
+                        <span>speed</span>
+                        <span>target {tgt}s</span>
+                      </div>
+                      <div className="relative h-1 bg-zinc-800 rounded-full">
+                        <div className="absolute left-0 top-0 h-full rounded-full"
+                          style={{
+                            width: `${Math.min((s.avgTime! / (tgt * 2)) * 100, 100)}%`,
+                            background: isSlow ? "#ef4444" : "#10b981",
+                          }} />
+                        {/* Target marker */}
+                        <div className="absolute top-[-3px] w-px h-[7px] bg-zinc-500"
+                          style={{ left: "50%" }} />
+                      </div>
+                    </div>
+                    {/* Tip */}
+                    {TIPS[id] && (
+                      <div className="bg-zinc-800/40 rounded-lg px-3 py-2 text-xs text-zinc-400 leading-relaxed">
+                        {TIPS[id][0]}
+                      </div>
+                    )}
+                    {/* Drill this */}
+                    <button
+                      onClick={() => onDrill(id)}
+                      className="w-full text-xs py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:border-emerald-700/60 hover:text-emerald-400 transition-colors">
+                      Drill this skill →
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ── Session Trend ──────────────────────────────────────────────────────────────
-function SessionTrend({ sessions }: {
-  sessions: Array<{ n: number; correct: number; ts: string; mode: string }>;
-}) {
-  const valid = sessions.filter(s => s.n > 0);
-  const last10 = valid.slice(-10);
-  if (last10.length < 2) return null;
+// ── Weakness Cards ─────────────────────────────────────────────────────────────
+function WeaknessCards({ data, onDrill }: { data: PerfData; onDrill: (id: SkillId) => void }) {
+  const ranking = getWeaknessRanking(data);
+  const tgt     = TARGET_TIMES.medium;
 
-  const barH = 48, barW = 14, gap = 4;
-  const totalW = last10.length * (barW + gap) - gap;
+  const weaknesses = ranking.filter(r =>
+    r.stats.n >= 3 && (
+      r.stats.accuracy! < WEAK_ACC ||
+      r.stats.avgTime!  > tgt * SLOW_MULT
+    )
+  ).slice(0, 4);
 
-  // Show date label for first and last bar
-  function shortDate(ts: string) {
-    const d = new Date(ts);
-    return `${d.getMonth() + 1}/${d.getDate()}`;
+  if (!weaknesses.length) {
+    return (
+      <div className="border border-zinc-800/60 rounded-2xl px-4 py-6 text-center mb-10">
+        <p className="text-sm text-zinc-500">No clear weaknesses yet.</p>
+        <p className="text-xs text-zinc-700 mt-1">Do more drills to see targeted analysis.</p>
+      </div>
+    );
   }
 
   return (
-    <div className="mb-10">
-      <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 px-4 pt-3 pb-2">
-        <div className="flex justify-between px-1 mb-2">
-          <span className="text-[10px] text-zinc-700">session accuracy</span>
-          <span className="text-[10px] text-zinc-700">last {last10.length}</span>
-        </div>
-        <svg viewBox={`0 0 ${totalW} ${barH + 14}`} className="w-full" style={{ height: 70 }}>
-          {last10.map((s, i) => {
-            const acc   = s.n ? s.correct / s.n : 0;
-            const h     = Math.max(3, acc * barH);
-            const x     = i * (barW + gap);
-            const color = acc >= 0.85 ? "#10b981" : acc >= 0.7 ? "#f59e0b" : "#ef4444";
-            return (
-              <g key={i}>
-                <title>{shortDate(s.ts)} · {s.mode} · {Math.round(acc * 100)}% · {s.n}q</title>
-                <rect x={x} y={barH - h} width={barW} height={h} rx={2.5}
-                  fill={color} opacity={0.8}
-                />
-                <text x={x + barW / 2} y={barH + 10} textAnchor="middle" fill="#3f3f46" fontSize={7}
-                  fontFamily="var(--font-jb-mono), monospace">
-                  {Math.round(acc * 100)}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-        <div className="flex justify-between text-zinc-700 text-[10px] mt-0.5">
-          <span>{shortDate(last10[0].ts)}</span>
-          <span>{shortDate(last10[last10.length - 1].ts)}</span>
-        </div>
-      </div>
+    <div className="space-y-3 mb-10">
+      {weaknesses.map(({ skillId, stats: s }) => {
+        const acc      = s.accuracy!;
+        const isWeak   = acc < WEAK_ACC;
+        const isSlow   = s.avgTime! > tgt * SLOW_MULT;
+        const isCrit   = acc < 0.65 || s.avgTime! > tgt * 2.2;
+        const tipList  = TIPS[skillId] || [];
+        const tip      = tipList[Math.floor(Math.random() * tipList.length)] || "";
+
+        // Score impact: if this skill were fixed to mastery, how much would score improve?
+        const currentImpact = (1 - acc) * 10 + Math.max(0, s.avgTime! - tgt) * 2;
+
+        return (
+          <div key={skillId} className="bg-zinc-900/60 rounded-2xl border border-zinc-800/60 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-start justify-between px-4 pt-3.5 pb-2">
+              <div>
+                <div className="text-sm font-semibold text-zinc-100">{SKILL_LABELS[skillId]}</div>
+                <div className="text-xs text-zinc-600 mt-0.5">
+                  {s.n} attempts · {Math.round(currentImpact * 10) / 10} impact score
+                </div>
+              </div>
+              <span className={`text-[9px] font-bold px-2 py-1 rounded-full tracking-widest ${
+                isCrit
+                  ? "bg-red-900/50 text-red-400 border border-red-800/50"
+                  : "bg-amber-900/30 text-amber-500 border border-amber-800/40"
+              }`}>
+                {isCrit ? "CRITICAL" : "WEAK"}
+              </span>
+            </div>
+
+            {/* Metrics */}
+            <div className="flex gap-2 px-4 pb-3">
+              {/* Accuracy */}
+              <div className={`flex-1 rounded-xl px-3 py-2 ${
+                isWeak ? "bg-red-900/20 border border-red-900/30" : "bg-zinc-800/50 border border-zinc-800"
+              }`}>
+                <div className={`text-lg font-mono font-bold tabular-nums ${
+                  isWeak ? "text-red-300" : "text-zinc-200"
+                }`}>
+                  {Math.round(acc * 100)}%
+                </div>
+                <div className="text-[9px] text-zinc-600">accuracy</div>
+                <div className="h-0.5 bg-zinc-800 rounded-full mt-1.5 overflow-hidden">
+                  <div className="h-full rounded-full"
+                    style={{ width: `${Math.round(acc * 100)}%`, background: isWeak ? "#ef4444" : "#10b981" }} />
+                </div>
+              </div>
+              {/* Speed */}
+              <div className={`flex-1 rounded-xl px-3 py-2 ${
+                isSlow ? "bg-red-900/20 border border-red-900/30" : "bg-zinc-800/50 border border-zinc-800"
+              }`}>
+                <div className={`text-lg font-mono font-bold tabular-nums ${
+                  isSlow ? "text-red-300" : "text-zinc-200"
+                }`}>
+                  {s.avgTime!.toFixed(1)}s
+                </div>
+                <div className="text-[9px] text-zinc-600">avg · target {tgt}s</div>
+                <div className="h-0.5 bg-zinc-800 rounded-full mt-1.5 overflow-hidden">
+                  <div className="h-full rounded-full"
+                    style={{
+                      width: `${Math.min((s.avgTime! / (tgt * 2.5)) * 100, 100)}%`,
+                      background: isSlow ? "#ef4444" : "#10b981",
+                    }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Tip */}
+            {tip && (
+              <div className="mx-4 mb-3 bg-zinc-800/40 rounded-xl px-3 py-2 text-xs text-zinc-400 leading-relaxed">
+                {tip}
+              </div>
+            )}
+
+            {/* Action */}
+            <div className="border-t border-zinc-800/50 px-4 py-2">
+              <button
+                onClick={() => onDrill(skillId)}
+                className="w-full text-xs py-1.5 text-emerald-500 hover:text-emerald-400 font-medium text-left transition-colors">
+                → Focus drill on {SKILL_LABELS[skillId]}
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────────
+// ── Session Log ────────────────────────────────────────────────────────────────
+function SessionLog({ data, projections, onDelete }: {
+  data: PerfData;
+  projections: Array<{ ts: string; score: number; cumulativeN: number }>;
+  onDelete: (idx: number) => void;
+}) {
+  const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
+  const valid   = data.sessions.filter(s => s.n > 0);
+  const display = [...valid].reverse();
+
+  if (!display.length) {
+    return <p className="text-xs text-zinc-600 py-4">No sessions yet.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {display.map((s, dIdx) => {
+        const realIdx    = valid.length - 1 - dIdx;
+        const acc        = s.n ? Math.round(s.correct / s.n * 100) : 0;
+        const simScore   = s.correct - (s.n - s.correct);
+        const ts         = new Date(s.ts);
+        const dateStr    = ts.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        const timeStr    = ts.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+        // Find matching projection snapshot
+        const proj = projections.find(p => p.ts === s.ts);
+        const dotColor = acc >= 85 ? "#10b981" : acc >= 70 ? "#f59e0b" : "#ef4444";
+
+        return (
+          <div key={dIdx}
+            className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium text-zinc-300 capitalize">{s.mode}</span>
+                  <span className="text-xs text-zinc-600">{dateStr} · {timeStr}</span>
+                </div>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <span className="text-xs font-mono tabular-nums text-zinc-400">{s.n}q · {acc}%</span>
+                  {s.mode === "sim" && (
+                    <span className="text-xs font-mono text-zinc-500">score {simScore}/80</span>
+                  )}
+                  {proj && (
+                    <span className="text-xs font-mono text-zinc-600">est. {proj.score}/80</span>
+                  )}
+                  <span className="text-xs font-mono text-zinc-700">{s.avgTime.toFixed(1)}s/q</span>
+                </div>
+              </div>
+              {deleteIdx === realIdx ? (
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => { onDelete(realIdx); setDeleteIdx(null); }}
+                    className="text-xs text-red-400 hover:text-red-300">confirm</button>
+                  <button onClick={() => setDeleteIdx(null)}
+                    className="text-xs text-zinc-600">cancel</button>
+                </div>
+              ) : (
+                <button onClick={() => setDeleteIdx(realIdx)}
+                  className="text-xs text-zinc-700 hover:text-red-400 transition-colors shrink-0">
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Main Dashboard ─────────────────────────────────────────────────────────────
+type Tab = "overview" | "skills" | "history" | "settings";
+
 export default function Dashboard() {
-  const [data,          setData]          = useState<PerfData | null>(null);
-  const [showSessions,  setShowSessions]  = useState(false);
-  const [showSettings,  setShowSettings]  = useState(false);
-  const [confirmReset,  setConfirmReset]  = useState(false);
-  const [deleteIdx,     setDeleteIdx]     = useState<number | null>(null);
-  const [myId,          setMyId]          = useState("");
-  const [syncInput,     setSyncInput]     = useState("");
-  const [syncMsg,       setSyncMsg]       = useState("");
-  const [copied,        setCopied]        = useState(false);
+  const [data,         setData]         = useState<PerfData | null>(null);
+  const [tab,          setTab]          = useState<Tab>("overview");
+  const [selectedSkill,setSelectedSkill]= useState<SkillId | null>(null);
+  const [myId,         setMyId]         = useState("");
+  const [syncInput,    setSyncInput]    = useState("");
+  const [syncMsg,      setSyncMsg]      = useState("");
+  const [copied,       setCopied]       = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => { setData(loadData()); setMyId(getUserId()); }, []);
 
-  // All derived state must live ABOVE the early return — hooks cannot be called
-  // conditionally, and the useMemo below would violate that rule if placed after.
-  const stats      = data ? allSkillStats(data)       : null;
-  const ranking    = data ? getWeaknessRanking(data)  : [];
-  const proj       = data ? optiverProjection(data)   : null;
-
-  const weaknesses = ranking
-    .filter(r =>
-      r.stats.n >= 3 && (
-        r.stats.accuracy! < WEAK_ACC ||
-        r.stats.avgTime!  > TARGET_TIMES.medium * SLOW_MULT
-      )
-    )
-    .slice(0, 3);
-
-  const mastered = ranking.filter(r =>
-    r.stats.n >= 3 &&
-    r.stats.accuracy! >= MASTERY_ACC &&
-    r.stats.avgTime!  <= TARGET_TIMES.medium * MASTERY_MULT
-  );
+  // All hooks above the early return
+  const stats       = data ? allSkillStats(data)        : null;
+  const proj        = data ? optiverProjection(data)    : null;
+  const projHistory = data ? sessionProjections(data)   : [];
+  const total       = data ? totalQuestions(data)       : 0;
 
   const weaknessTips = useMemo(
-    () => Object.fromEntries(weaknesses.map(({ skillId }) => [skillId, getRandomTip(skillId)])),
+    () => {
+      if (!data) return {};
+      return Object.fromEntries(
+        SKILL_IDS.map(id => {
+          const tips = TIPS[id] || [];
+          return [id, tips[Math.floor(Math.random() * tips.length)] || ""];
+        })
+      );
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [weaknesses.map(w => w.skillId).join(",")]
+    [data ? data.sessions.length : 0]
   );
-
-  const validSessions = data ? data.sessions.filter(s => s.n > 0) : [];
-  const sessions      = [...validSessions].reverse();
 
   if (!data || !stats) return null;
 
+  // ── Event handlers ──────────────────────────────────────────────────────────
   async function handleLinkDevice() {
     if (!syncInput.trim()) return;
-    setSyncMsg("Pulling data…");
+    setSyncMsg("Pulling…");
     const cloud = await pullFromCloud(syncInput.trim().toLowerCase());
     if (!cloud) { setSyncMsg("No data found for that code."); return; }
     setSyncCode(syncInput.trim().toLowerCase());
@@ -255,8 +654,29 @@ export default function Dashboard() {
     saveData(merged);
     setData(merged);
     await pushToCloud(merged);
-    setSyncMsg("Linked! Data merged.");
+    setSyncMsg("Linked. Data merged.");
     setSyncInput("");
+  }
+
+  function handleDelete(idx: number) {
+    if (!data) return;
+    const sessionsBeforeFilter = [...data.sessions].filter(s => s.n > 0);
+    const sess = sessionsBeforeFilter[sessionsBeforeFilter.length - 1 - idx];
+    if (!sess) return;
+    const realIdx = data.sessions.indexOf(sess);
+    if (realIdx === -1) return;
+    deleteSession(data, realIdx);
+    saveData(data);
+    setData({ ...data });
+  }
+
+  function handleReset() {
+    setData(resetAllData());
+    setConfirmReset(false);
+  }
+
+  function handleDrill(skillId: SkillId) {
+    window.location.href = `/drill?mode=focus&skills=${skillId}`;
   }
 
   function copyId() {
@@ -265,282 +685,188 @@ export default function Dashboard() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function handleDelete(idx: number) {
-    if (!data) return;
-    deleteSession(data, idx);
-    saveData(data);
-    setData({ ...data });
-    setDeleteIdx(null);
-  }
-
-  function handleReset() {
-    setData(resetAllData());
-    setConfirmReset(false);
-  }
+  // ── Tab nav ─────────────────────────────────────────────────────────────────
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "overview",  label: "Overview"  },
+    { id: "skills",    label: "Skills"    },
+    { id: "history",   label: "History"   },
+    { id: "settings",  label: "Settings"  },
+  ];
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-8 pb-16">
+    <main className="max-w-md mx-auto px-4 pt-6 pb-20">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <Link href="/" className="text-zinc-500 text-sm hover:text-zinc-300 transition-colors">← home</Link>
-        <h1 className="text-lg font-semibold tracking-tight">Coach Report</h1>
-        <div />
+      <div className="flex items-center justify-between mb-6">
+        <Link href="/" className="text-zinc-600 text-sm hover:text-zinc-300 transition-colors">← home</Link>
+        <h1 className="text-base font-semibold tracking-tight text-zinc-200">Coach Report</h1>
+        <span className="text-xs text-zinc-700 font-mono">{total} reps</span>
       </div>
 
-      {/* 1. Score block */}
-      {proj ? (
-        <ScoreBlock
-          score={proj.projectedScore}
-          speed={proj.avgSpeed}
-          acc={proj.avgAcc}
-          answerable={proj.answerable}
-        />
-      ) : (
-        <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/80 p-6 mb-10 text-center">
-          <div className="text-zinc-500 text-sm">Complete a few drills to see your Optiver estimate</div>
-        </div>
-      )}
+      {/* Tab nav */}
+      <div className="flex gap-0.5 bg-zinc-900 rounded-xl p-1 mb-7 border border-zinc-800/60">
+        {tabs.map(t => (
+          <button key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium ${
+              tab === t.id
+                ? "bg-zinc-700 text-zinc-100"
+                : "text-zinc-600 hover:text-zinc-400"
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      {/* 2. Radar Chart */}
-      <RadarChart stats={stats} />
+      {/* ── Overview tab ───────────────────────────────────────────────────── */}
+      {tab === "overview" && (
+        <>
+          {proj ? (
+            <ScoreHero proj={proj} />
+          ) : (
+            <div className="border border-zinc-800/60 rounded-2xl px-4 py-8 text-center mb-10">
+              <p className="text-zinc-500 text-sm mb-1">Not enough data yet</p>
+              <p className="text-zinc-700 text-xs">Do at least 10 attempts across 1+ skills to unlock your estimate.</p>
+            </div>
+          )}
 
-      {/* 3. Weaknesses — no header, severity badges self-identify the section */}
-      {weaknesses.length > 0 && (
-        <div className="space-y-3 mb-10">
-          {weaknesses.map(({ skillId, stats: s }) => {
-            const tgt      = TARGET_TIMES.medium;
-            const isSlow   = s.avgTime  !== null && s.avgTime  > tgt * SLOW_MULT;
-            const isWeak   = s.accuracy !== null && s.accuracy < WEAK_ACC;
-            const isCrit   = (s.accuracy !== null && s.accuracy < 0.65) ||
-                             (s.avgTime  !== null && s.avgTime  > tgt * 2);
-            const acc      = s.accuracy ?? 0;
-            const barStop  = Math.min(acc * 100 * 1.3, 100);
-            const gradient = isWeak
-              ? `linear-gradient(90deg, #ef4444 0%, #f59e0b ${barStop}%)`
-              : `linear-gradient(90deg, #f59e0b 0%, #10b981 ${barStop}%)`;
+          {/* Trajectory */}
+          <div className="mb-2">
+            <p className="text-xs text-zinc-600 mb-2">Progress over time</p>
+            <TrajectoryChart points={projHistory} />
+          </div>
 
-            return (
-              <div key={skillId} className="bg-zinc-900/60 rounded-2xl p-4 border border-zinc-800/60">
-                <div className="flex items-start justify-between mb-3">
-                  <span className="font-medium text-sm text-zinc-100">{SKILL_LABELS[skillId]}</span>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide ${
-                    isCrit
-                      ? "bg-red-900/50 text-red-400"
-                      : "bg-amber-900/30 text-amber-500"
-                  }`}>
-                    {isCrit ? "CRITICAL" : "NEEDS WORK"}
-                  </span>
+          {/* Radar snapshot */}
+          <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/60 p-3 mb-10">
+            <div className="flex justify-between px-1 mb-1">
+              <span className="text-[10px] text-zinc-600">skill profile</span>
+              <button className="text-[10px] text-zinc-700 hover:text-zinc-400"
+                onClick={() => setTab("skills")}>
+                see breakdown →
+              </button>
+            </div>
+            <Radar stats={stats} onSelect={setSelectedSkill} selected={selectedSkill} />
+            {selectedSkill && (
+              <div className="mt-2 border-t border-zinc-800/60 pt-2 px-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-zinc-200">{SKILL_LABELS[selectedSkill]}</span>
+                  <button onClick={() => setSelectedSkill(null)} className="text-zinc-700 text-xs">✕</button>
                 </div>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {s.accuracy !== null && (
-                    <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
-                      isWeak ? "bg-red-900/30 text-red-300" : "bg-amber-900/30 text-amber-300"
-                    }`}>
-                      {Math.round(s.accuracy * 100)}% acc
-                    </span>
-                  )}
-                  {s.avgTime !== null && (
-                    <span className={`text-xs px-2 py-1 rounded-lg font-mono tabular-nums ${
-                      isSlow ? "bg-red-900/30 text-red-300" : "bg-zinc-800 text-zinc-400"
-                    }`}>
-                      {s.avgTime.toFixed(1)}s · target {tgt}s
-                    </span>
-                  )}
-                </div>
-                {s.accuracy !== null && (
-                  <div className="h-1 bg-zinc-800 rounded-full overflow-hidden mb-3">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${Math.min(acc * 100, 100)}%`, background: gradient }}
-                    />
-                  </div>
-                )}
-                <div className="bg-zinc-800/40 rounded-xl px-3 py-2 text-xs text-zinc-400 leading-relaxed">
-                  {weaknessTips[skillId]}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 4. Session Trend */}
-      <SessionTrend sessions={data.sessions} />
-
-      {/* 5. All Skills Grid — no header, grid is self-identifying */}
-      <div className="grid grid-cols-2 gap-2 mb-10">
-        {SKILL_IDS.map(id => {
-          const st = stats[id];
-          const dotColor =
-            !st || st.n === 0 ? "#3f3f46"
-            : st.accuracy! >= MASTERY_ACC ? "#10b981"
-            : st.accuracy! < WEAK_ACC     ? "#ef4444"
-            : "#f59e0b";
-          const dataColor =
-            !st || st.n === 0 ? "#52525b"
-            : st.accuracy! >= MASTERY_ACC ? "#6ee7b7"
-            : st.accuracy! < WEAK_ACC     ? "#fca5a5"
-            : "#fcd34d";
-
-          return (
-            <div key={id}
-              className="bg-zinc-900/50 rounded-xl px-3 py-2.5 border border-zinc-800/60 flex items-center gap-2.5">
-              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-zinc-300 truncate leading-snug">
-                  {SKILL_LABELS[id]}
-                </div>
-                {st.n === 0 ? (
-                  <div className="text-xs text-zinc-600 mt-0.5 leading-snug">no data</div>
+                {stats[selectedSkill].n === 0 ? (
+                  <p className="text-xs text-zinc-600">No data yet.</p>
                 ) : (
-                  <div className="text-xs font-mono tabular-nums mt-0.5 leading-snug"
-                    style={{ color: dataColor }}>
-                    {Math.round(st.accuracy! * 100)}%&nbsp;&nbsp;{st.avgTime!.toFixed(1)}s
+                  <div className="flex gap-4 text-xs">
+                    <span className="font-mono text-zinc-300">{Math.round(stats[selectedSkill].accuracy! * 100)}% acc</span>
+                    <span className="font-mono text-zinc-300">{stats[selectedSkill].avgTime!.toFixed(1)}s avg</span>
+                    <span className="text-zinc-600">{stats[selectedSkill].n} attempts</span>
                   </div>
                 )}
+                <button onClick={() => handleDrill(selectedSkill)}
+                  className="text-xs text-emerald-500 hover:text-emerald-400 mt-1.5 transition-colors">
+                  → Drill this skill
+                </button>
               </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 6. Mastered — chips, no header */}
-      {mastered.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-10">
-          {mastered.map(({ skillId }) => (
-            <span key={skillId}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-emerald-800/60 bg-emerald-900/20 text-emerald-400 font-medium">
-              <span className="text-emerald-600 text-[9px]">✓</span>
-              {SKILL_LABELS[skillId]}
-            </span>
-          ))}
-        </div>
+            )}
+          </div>
+        </>
       )}
 
-      {/* 7. Sessions — collapsible, trigger is the label */}
-      <div className="mb-1">
-        <button
-          onClick={() => setShowSessions(s => !s)}
-          className="w-full flex items-center justify-between py-3 border-t border-zinc-800/60 group"
-        >
-          <span className="text-sm text-zinc-500 group-hover:text-zinc-300 transition-colors">
-            Sessions ({validSessions.length})
-          </span>
-          <span className="text-zinc-700 text-xs">{showSessions ? "▲" : "▼"}</span>
-        </button>
-        {showSessions && (
-          <div className="space-y-2 pb-2">
-            {sessions.length === 0 && (
-              <p className="text-zinc-600 text-sm py-2">No sessions yet.</p>
-            )}
-            {sessions.map((s, displayIdx) => {
-              const realIdx  = validSessions.length - 1 - displayIdx;
-              const ts       = s.ts.slice(0, 16).replace("T", " ");
-              const acc      = s.n ? Math.round(s.correct / s.n * 100) : 0;
-              const simScore = s.correct - (s.n - s.correct);
-              return (
-                <div key={displayIdx}
-                  className="bg-zinc-900/50 rounded-xl px-4 py-3 flex items-center justify-between border border-zinc-800/50">
-                  <div>
-                    <div className="text-sm font-medium capitalize text-zinc-200">{s.mode} — {s.n}q</div>
-                    <div className="text-xs text-zinc-600 font-mono tabular-nums mt-0.5">
-                      {ts} · {acc}%{s.mode === "sim" ? ` · ${simScore}/80` : ""}
-                    </div>
-                  </div>
-                  {deleteIdx === realIdx ? (
-                    <div className="flex gap-2">
-                      <button onClick={() => handleDelete(realIdx)} className="text-xs text-red-400 hover:text-red-300">confirm</button>
-                      <button onClick={() => setDeleteIdx(null)} className="text-xs text-zinc-500">cancel</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setDeleteIdx(realIdx)}
-                      className="text-xs text-zinc-700 hover:text-red-400 transition-colors">
-                      delete
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+      {/* ── Skills tab ─────────────────────────────────────────────────────── */}
+      {tab === "skills" && (
+        <>
+          <div className="mb-5">
+            <p className="text-xs text-zinc-600 mb-1">Tap any skill to expand. Red = below {Math.round(WEAK_ACC * 100)}% or {Math.round(TARGET_TIMES.medium * SLOW_MULT * 10) / 10}s+ avg.</p>
           </div>
-        )}
-      </div>
+          <SkillTable stats={stats} onDrill={handleDrill} />
 
-      {/* 8. Settings — collapsible */}
-      <div>
-        <button
-          onClick={() => setShowSettings(s => !s)}
-          className="w-full flex items-center justify-between py-3 border-t border-zinc-800/60 group"
-        >
-          <span className="text-sm text-zinc-500 group-hover:text-zinc-300 transition-colors">
-            Settings
-          </span>
-          <span className="text-zinc-700 text-xs">{showSettings ? "▲" : "▼"}</span>
-        </button>
-        {showSettings && (
-          <div className="space-y-4 pb-4">
+          {/* Weakness focus */}
+          <div className="mb-2">
+            <p className="text-xs text-zinc-600 mb-4">Priority focus areas</p>
+            <WeaknessCards data={data} onDrill={handleDrill} />
+          </div>
+        </>
+      )}
 
-            {/* Sync */}
-            <div>
-              <p className="text-xs text-zinc-600 mb-2">Sync between devices</p>
-              <div className="bg-zinc-900/50 rounded-xl p-3 mb-2 border border-zinc-800/50">
-                <p className="text-xs text-zinc-700 mb-2">Your sync code — paste on another device</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs text-zinc-400 bg-zinc-800/60 rounded-lg px-3 py-2 break-all font-mono">
-                    {myId || "loading…"}
-                  </code>
-                  <button onClick={copyId}
-                    className="text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg px-3 py-2 whitespace-nowrap transition-colors text-zinc-300">
-                    {copied ? "✓" : "Copy"}
-                  </button>
-                </div>
-              </div>
-              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50">
-                <p className="text-xs text-zinc-700 mb-2">Got a code from another device?</p>
-                <div className="flex gap-2">
-                  <input
-                    value={syncInput}
-                    onChange={e => setSyncInput(e.target.value)}
-                    placeholder="paste sync code…"
-                    className="flex-1 text-xs bg-zinc-800/60 rounded-lg px-3 py-2 font-mono text-zinc-300 placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-700"
-                  />
-                  <button onClick={handleLinkDevice}
-                    className="text-xs bg-blue-600 hover:bg-blue-500 rounded-lg px-3 py-2 transition-colors whitespace-nowrap font-medium">
-                    Link
-                  </button>
-                </div>
-                {syncMsg && <p className="text-xs text-zinc-500 mt-2">{syncMsg}</p>}
-              </div>
-            </div>
+      {/* ── History tab ────────────────────────────────────────────────────── */}
+      {tab === "history" && (
+        <>
+          <div className="mb-4">
+            <p className="text-xs text-zinc-600">
+              {data.sessions.filter(s => s.n > 0).length} sessions · {total} total reps
+            </p>
+          </div>
+          <SessionLog
+            data={data}
+            projections={projHistory}
+            onDelete={handleDelete}
+          />
+        </>
+      )}
 
-            {/* Reset */}
-            <div>
-              {confirmReset ? (
-                <div className="bg-red-950/30 rounded-xl p-3 border border-red-900/30">
-                  {/* Fixed: was text-zinc-400 on bg-red-900 → now text-red-300 */}
-                  <p className="text-xs text-red-300 mb-3">Delete all history? Can&apos;t be undone.</p>
-                  <div className="flex gap-2">
-                    <button onClick={handleReset}
-                      className="flex-1 bg-red-700 hover:bg-red-600 rounded-lg py-2 text-xs font-semibold transition-colors text-white">
-                      Yes, reset
-                    </button>
-                    <button onClick={() => setConfirmReset(false)}
-                      className="flex-1 bg-zinc-800 rounded-lg py-2 text-xs transition-colors text-zinc-300">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button onClick={() => setConfirmReset(true)}
-                  className="text-xs text-zinc-700 hover:text-red-400 transition-colors">
-                  Reset all data
+      {/* ── Settings tab ───────────────────────────────────────────────────── */}
+      {tab === "settings" && (
+        <div className="space-y-5">
+
+          {/* Sync */}
+          <div>
+            <p className="text-xs text-zinc-500 mb-3">Cross-device sync</p>
+            <div className="bg-zinc-900/50 rounded-xl p-3 mb-2 border border-zinc-800/50">
+              <p className="text-xs text-zinc-700 mb-2">Your sync code</p>
+              <div className="flex gap-2">
+                <code className="flex-1 text-xs text-zinc-400 bg-zinc-800/60 rounded-lg px-3 py-2 break-all font-mono">
+                  {myId || "loading…"}
+                </code>
+                <button onClick={copyId}
+                  className="text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg px-3 py-2 whitespace-nowrap text-zinc-300 transition-colors">
+                  {copied ? "✓" : "Copy"}
                 </button>
-              )}
+              </div>
             </div>
-
+            <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800/50">
+              <p className="text-xs text-zinc-700 mb-2">Paste a code from another device</p>
+              <div className="flex gap-2">
+                <input
+                  value={syncInput}
+                  onChange={e => setSyncInput(e.target.value)}
+                  placeholder="paste code…"
+                  className="flex-1 text-xs bg-zinc-800/60 rounded-lg px-3 py-2 font-mono text-zinc-300 placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+                />
+                <button onClick={handleLinkDevice}
+                  className="text-xs bg-blue-700 hover:bg-blue-600 rounded-lg px-3 py-2 text-white font-medium transition-colors whitespace-nowrap">
+                  Link
+                </button>
+              </div>
+              {syncMsg && <p className="text-xs text-zinc-500 mt-2">{syncMsg}</p>}
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Reset */}
+          <div>
+            <p className="text-xs text-zinc-500 mb-3">Data</p>
+            {confirmReset ? (
+              <div className="bg-red-950/30 rounded-xl p-3 border border-red-900/30">
+                <p className="text-xs text-red-300 mb-3">Delete ALL history? This cannot be undone.</p>
+                <div className="flex gap-2">
+                  <button onClick={handleReset}
+                    className="flex-1 bg-red-700 hover:bg-red-600 rounded-lg py-2 text-xs font-semibold text-white transition-colors">
+                    Yes, reset everything
+                  </button>
+                  <button onClick={() => setConfirmReset(false)}
+                    className="flex-1 bg-zinc-800 rounded-lg py-2 text-xs text-zinc-300 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmReset(true)}
+                className="text-xs text-zinc-700 hover:text-red-400 transition-colors">
+                Reset all data
+              </button>
+            )}
+          </div>
+
+        </div>
+      )}
 
     </main>
   );

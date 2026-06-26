@@ -9,7 +9,6 @@ export const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 const PROMOTE_AT = 4;
 const DEMOTE_AT  = 3;
 
-// In-memory session state
 const skillDifficulty: Record<SkillId, Difficulty> = Object.fromEntries(
   SKILL_IDS.map(s => [s, "medium"])
 ) as Record<SkillId, Difficulty>;
@@ -90,15 +89,84 @@ export interface OptiverProjection {
   projectedScore: number;
   avgAcc: number;
   avgSpeed: number;
+  // confidence 0–1: how reliable the estimate is (ramps from 0 at 10 attempts to 1 at 100)
+  confidence: number;
+  totalAttempts: number;
+  coveredSkills: number;
 }
 
 export function optiverProjection(data: PerfData): OptiverProjection | null {
-  const statsArr = SKILL_IDS.map(s => skillStats(data, s)).filter(s => s.n >= 3);
-  if (!statsArr.length) return null;
-  const avgAcc   = statsArr.reduce((a, s) => a + s.accuracy!, 0) / statsArr.length;
-  const avgSpeed = statsArr.reduce((a, s) => a + s.avgTime!, 0)  / statsArr.length;
-  const answerable     = Math.min(80, Math.floor(480 / avgSpeed));
-  const correct        = Math.round(answerable * avgAcc);
-  const wrong          = answerable - correct;
-  return { answerable, projectedScore: correct - wrong, avgAcc, avgSpeed };
+  const statsArr   = SKILL_IDS.map(s => skillStats(data, s));
+  const withData   = statsArr.filter(s => s.n >= 3);
+  if (!withData.length) return null;
+
+  const totalAttempts = SKILL_IDS.reduce((sum, s) => sum + data.skills[s].attempts.length, 0);
+  if (totalAttempts < 10) return null;
+
+  // Weight by sample size so large-N skills drive the average
+  const totalN   = withData.reduce((sum, s) => sum + s.n, 0);
+  const avgAcc   = withData.reduce((sum, s) => sum + s.accuracy! * s.n, 0) / totalN;
+  const avgSpeed = withData.reduce((sum, s) => sum + s.avgTime!  * s.n, 0) / totalN;
+
+  // Test-condition penalties: you're 10% slower and 8% less accurate under pressure
+  const testSpeed = avgSpeed * 1.10;
+  const testAcc   = avgAcc   * 0.92;
+
+  const answerable = Math.min(80, Math.floor(480 / testSpeed));
+  const correct    = answerable * testAcc;
+  const wrong      = answerable - correct;
+  const rawScore   = Math.max(0, correct - wrong);
+
+  // Coverage penalty: untested skills will hurt on test day
+  const coverage   = withData.length / SKILL_IDS.length;
+
+  // Confidence: 0 at 10 attempts, 1 at 100 attempts
+  const confidence = Math.min(1, Math.max(0, (totalAttempts - 10) / 90));
+
+  // Pull estimate toward zero at low confidence; full estimate at high confidence
+  const projectedScore = Math.round(rawScore * coverage * (0.15 + 0.85 * confidence));
+
+  return {
+    answerable,
+    projectedScore: Math.max(0, Math.min(80, projectedScore)),
+    avgAcc,
+    avgSpeed,
+    confidence,
+    totalAttempts,
+    coveredSkills: withData.length,
+  };
+}
+
+export interface SessionProjection {
+  ts: string;
+  score: number;
+  cumulativeN: number;
+}
+
+// Cumulative estimate after each session — drives the trajectory chart
+export function sessionProjections(data: PerfData): SessionProjection[] {
+  const result: SessionProjection[] = [];
+  let cumN = 0, cumCorrect = 0, cumTimeSum = 0;
+
+  for (const session of data.sessions) {
+    if (session.n === 0) continue;
+    cumN       += session.n;
+    cumCorrect += session.correct;
+    cumTimeSum += session.avgTime * session.n;
+    if (cumN < 5) continue;
+
+    const acc     = cumCorrect / cumN;
+    const avgTime = cumTimeSum / cumN;
+    const testAcc   = acc * 0.92;
+    const testSpeed = avgTime * 1.10;
+    const answerable = Math.min(80, Math.floor(480 / Math.max(testSpeed, 0.5)));
+    const correct    = answerable * testAcc;
+    const wrong      = answerable - correct;
+    const rawScore   = Math.max(0, correct - wrong);
+    const confidence = Math.min(1, Math.max(0, (cumN - 10) / 90));
+    const score = Math.round(rawScore * (0.15 + 0.85 * confidence));
+
+    result.push({ ts: session.ts, score: Math.max(0, score), cumulativeN: cumN });
+  }
+  return result;
 }
