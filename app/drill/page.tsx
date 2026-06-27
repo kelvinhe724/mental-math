@@ -328,7 +328,7 @@ function DrillInner() {
     feedback === "wrong"   ? "text-red-400"     : "";
 
   return (
-    <main className="max-w-md mx-auto flex flex-col px-4"
+    <main className="max-w-md mx-auto flex flex-col px-4 md:max-w-xl"
       style={{ height: "100dvh", paddingTop: "env(safe-area-inset-top, 12px)", paddingBottom: "env(safe-area-inset-bottom, 12px)" }}>
 
       {/* Header */}

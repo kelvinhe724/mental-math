@@ -69,7 +69,7 @@ export default function Home() {
   ];
 
   return (
-    <main className="max-w-md mx-auto px-5 pb-10"
+    <main className="max-w-md mx-auto px-5 pb-10 md:max-w-lg"
       style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 40px)" }}>
 
       {/* Header */}

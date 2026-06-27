@@ -897,7 +897,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-6 pb-20">
+    <main className="max-w-md mx-auto px-4 pt-6 pb-20 md:max-w-4xl">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -924,29 +924,36 @@ export default function Dashboard() {
       {/* ── Overview tab ───────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <>
-          {proj ? (
-            <ScoreHero proj={proj} />
-          ) : (
-            <div className="border border-zinc-800/60 rounded-2xl px-4 py-8 text-center mb-10">
-              <p className="text-zinc-500 text-sm mb-1">Not enough data yet</p>
-              <p className="text-zinc-700 text-xs">Do at least 10 attempts across 1+ skills to unlock your estimate.</p>
+          {/* On desktop: 2-column grid */}
+          <div className="md:grid md:grid-cols-2 md:gap-8 md:items-start">
+            {/* Left column: score + trajectory */}
+            <div>
+              {proj ? (
+                <ScoreHero proj={proj} />
+              ) : (
+                <div className="border border-zinc-800/60 rounded-2xl px-4 py-8 text-center mb-10">
+                  <p className="text-zinc-500 text-sm mb-1">Not enough data yet</p>
+                  <p className="text-zinc-700 text-xs">Do at least 10 attempts across 1+ skills to unlock your estimate.</p>
+                </div>
+              )}
+
+              {/* Trajectory */}
+              <div className="mb-2">
+                <p className="text-[10px] text-zinc-600 mb-2">Score trajectory</p>
+                <TrajectoryChart points={projHistory} />
+              </div>
+
+              {/* Scatter: accuracy vs speed */}
+              <ScatterChart stats={stats} />
             </div>
-          )}
 
-          {/* Session panel */}
-          <SessionPanel data={data} />
+            {/* Right column: session panel + radar */}
+            <div>
+              {/* Session panel */}
+              <SessionPanel data={data} />
 
-          {/* Trajectory */}
-          <div className="mb-2">
-            <p className="text-[10px] text-zinc-600 mb-2">Score trajectory</p>
-            <TrajectoryChart points={projHistory} />
-          </div>
-
-          {/* Scatter: accuracy vs speed */}
-          <ScatterChart stats={stats} />
-
-          {/* Radar snapshot */}
-          <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/60 p-3 mb-10">
+              {/* Radar snapshot */}
+              <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/60 p-3 mb-10">
             <div className="flex justify-between px-1 mb-1">
               <span className="text-[10px] text-zinc-600">skill profile</span>
               <button className="text-[10px] text-zinc-700 hover:text-zinc-400"
@@ -977,19 +984,20 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+          </div>{/* end right column */}
+          </div>{/* end 2-col grid */}
         </>
       )}
 
       {/* ── Skills tab ─────────────────────────────────────────────────────── */}
       {tab === "skills" && (
-        <>
+        <div className="md:grid md:grid-cols-2 md:gap-8 md:items-start">
           <DifficultyHeatmap data={data} />
-
-          <div className="mb-2">
+          <div>
             <p className="text-[10px] text-zinc-600 mb-4">Priority focus areas</p>
             <WeaknessCards data={data} onDrill={handleDrill} />
           </div>
-        </>
+        </div>
       )}
 
       {/* ── History tab ────────────────────────────────────────────────────── */}

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { useIsTouch } from "@/lib/useDevice";
 
 interface NumpadProps {
   value: string;
@@ -7,19 +8,50 @@ interface NumpadProps {
   onSubmit: () => void;
 }
 
-export default function Numpad({ value, onChange, onSubmit }: NumpadProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function sanitize(v: string) { return v.replace(/[^0-9./\-]/g, ""); }
 
+// ── Desktop: clean keyboard input ─────────────────────────────────────────────
+function DesktopInput({ value, onChange, onSubmit }: NumpadProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { if (value === "") inputRef.current?.focus(); }, [value]);
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") { e.preventDefault(); onSubmit(); }
-  }
+  return (
+    <div className="w-full max-w-sm mx-auto">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={e => onChange(sanitize(e.target.value))}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSubmit(); } }}
+        placeholder="—"
+        className="w-full rounded-2xl bg-zinc-900 border border-zinc-700/50 px-6 py-5
+                   text-center text-4xl font-mono text-white placeholder-zinc-700
+                   focus:outline-none focus:border-zinc-500 caret-emerald-400"
+      />
+      <div className="flex items-center justify-between mt-3 px-1">
+        <span className="text-xs text-zinc-700">use / for fractions · − for negatives</span>
+        <button
+          onClick={onSubmit}
+          disabled={!value}
+          className={`px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+            value
+              ? "bg-emerald-500 hover:bg-emerald-400 text-black"
+              : "bg-zinc-800/40 text-zinc-600 cursor-not-allowed"
+          }`}
+        >
+          Enter ↵
+        </button>
+      </div>
+    </div>
+  );
+}
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    onChange(e.target.value.replace(/[^0-9./\-]/g, ""));
-  }
+// ── Mobile: custom numpad ─────────────────────────────────────────────────────
+function TouchNumpad({ value, onChange, onSubmit }: NumpadProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { if (value === "") inputRef.current?.focus(); }, [value]);
 
   function pressKey(key: string) {
     const el = inputRef.current;
@@ -67,27 +99,22 @@ export default function Numpad({ value, onChange, onSubmit }: NumpadProps) {
 
   return (
     <div className="w-full max-w-xs mx-auto space-y-2">
-      {/* Native input — arrow keys, cursor, physical keyboard all work */}
       <input
         ref={inputRef}
         type="text"
         inputMode="none"
         value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
+        onChange={e => onChange(sanitize(e.target.value))}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSubmit(); } }}
         placeholder="—"
         className="w-full rounded-2xl bg-zinc-900 border border-zinc-700/50 px-5 py-4
                    text-right text-3xl font-mono text-white placeholder-zinc-700
                    focus:outline-none focus:border-zinc-500 caret-emerald-400 mb-1"
       />
-
-      {/* Cursor navigation row — compact arrows for mobile */}
       <div className="grid grid-cols-2 gap-2">
         <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("←"); }}>←</button>
         <button className={nav} onPointerDown={e => { e.preventDefault(); pressKey("→"); }}>→</button>
       </div>
-
-      {/* Numpad grid: 4 columns */}
       <div className="grid grid-cols-4 gap-2">
         {(["7","8","9"] as const).map(k =>
           <button key={k} className={num} onPointerDown={e => { e.preventDefault(); pressKey(k); }}>{k}</button>
@@ -106,13 +133,14 @@ export default function Numpad({ value, onChange, onSubmit }: NumpadProps) {
 
         <button className={sym} onPointerDown={e => { e.preventDefault(); pressKey("-"); }}>−</button>
         <button className={num} onPointerDown={e => { e.preventDefault(); pressKey("0"); }}>0</button>
-        <button
-          className={ok}
-          onPointerDown={e => { e.preventDefault(); if (value) onSubmit(); }}
-        >
-          Enter ↵
-        </button>
+        <button className={ok} onPointerDown={e => { e.preventDefault(); if (value) onSubmit(); }}>Enter ↵</button>
       </div>
     </div>
   );
+}
+
+// ── Exported: auto-selects by pointer type ────────────────────────────────────
+export default function Numpad(props: NumpadProps) {
+  const isTouch = useIsTouch();
+  return isTouch ? <TouchNumpad {...props} /> : <DesktopInput {...props} />;
 }
