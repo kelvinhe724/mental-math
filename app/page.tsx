@@ -182,6 +182,20 @@ export default function Home() {
 
       <div className="my-5 h-px bg-zinc-800/50" />
 
+      {/* Learn */}
+      <Link href="/learn"
+        className="group flex items-center justify-between w-full py-2.5">
+        <div>
+          <span className="text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">
+            Learn strategies
+          </span>
+          <span className="text-xs text-zinc-700 ml-2.5">guides + worked examples</span>
+        </div>
+        <span className="text-zinc-700 group-hover:text-zinc-400 transition-colors">→</span>
+      </Link>
+
+      <div className="h-px bg-zinc-800/40" />
+
       {/* Coach Report */}
       <Link href="/dashboard"
         className="group flex items-center justify-between w-full py-2.5">
