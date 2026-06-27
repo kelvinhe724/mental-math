@@ -1,6 +1,13 @@
 import { supabase } from "./supabase";
 import { PerfData } from "./tracker";
 
+function withTimeout<T>(thenable: PromiseLike<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    Promise.resolve(thenable),
+    new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 const USER_ID_KEY   = "mentalmath_user_id";
 const LAST_SYNC_KEY = "mentalmath_last_sync";
 
@@ -31,11 +38,13 @@ export async function pushToCloud(data: PerfData): Promise<boolean> {
   try {
     const userId = getUserId();
     if (!userId) return false;
-    const { error } = await supabase
-      .from("user_data")
-      .upsert({ user_id: userId, data, updated_at: new Date().toISOString() });
-    if (!error) stampSync();
-    return !error;
+    const result = await withTimeout(
+      supabase.from("user_data").upsert({ user_id: userId, data, updated_at: new Date().toISOString() }),
+      5000,
+    );
+    if (!result || result.error) return false;
+    stampSync();
+    return true;
   } catch {
     return false;
   }
@@ -45,13 +54,12 @@ export async function pullFromCloud(userId?: string): Promise<PerfData | null> {
   try {
     const id = userId ?? getUserId();
     if (!id) return null;
-    const { data, error } = await supabase
-      .from("user_data")
-      .select("data")
-      .eq("user_id", id)
-      .single();
-    if (error || !data) return null;
-    return data.data as PerfData;
+    const result = await withTimeout(
+      supabase.from("user_data").select("data").eq("user_id", id).single(),
+      4000,
+    );
+    if (!result || result.error || !result.data) return null;
+    return result.data.data as PerfData;
   } catch {
     return null;
   }
