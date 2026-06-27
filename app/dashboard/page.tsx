@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  loadData, saveData, allSkillStats, skillStats, skillStatsByDifficulty, deleteSession,
+  loadData, saveData, allSkillStats, skillStats, skillStatsByDifficulty, deleteSessionByTs,
   resetAllData, PerfData, SkillStats, totalQuestions,
 } from "@/lib/tracker";
 import {
@@ -226,32 +226,31 @@ function SessionPanel({ data }: { data: PerfData }) {
 
   return (
     <div className="mb-10">
-      <div className="flex justify-between items-center mb-2.5">
-        <span className="text-[10px] text-zinc-600">session history</span>
-        <span className="text-[10px] text-zinc-800">{valid.length} total</span>
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-[10px] text-zinc-600">recent sessions</span>
+        <span className="text-[10px] text-zinc-700">{valid.length} total</span>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {display.map((s, i) => {
-          const acc = s.n ? s.correct / s.n : 0;
-          const c   = acc >= 0.85 ? "#10b981" : acc >= 0.70 ? "#f59e0b" : "#ef4444";
-          const d   = new Date(s.ts);
+          const acc   = s.n ? s.correct / s.n : 0;
+          const wrong = s.n - s.correct;
+          const c     = acc >= 0.85 ? "#10b981" : acc >= 0.70 ? "#f59e0b" : "#ef4444";
+          const d     = new Date(s.ts);
           const dateStr = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-          const isSlow  = s.avgTime > 7;
           return (
-            <div key={i}
-              className="flex items-center gap-2 py-1.5 border-b border-zinc-800/30 last:border-0">
+            <div key={i} className="flex items-center gap-2.5 py-2 border-b border-zinc-800/30 last:border-0">
               <span className="text-[9px] text-zinc-700 font-mono w-10 shrink-0">{dateStr}</span>
-              <span className="text-[9px] text-zinc-700 capitalize w-14 shrink-0 truncate">{s.mode}</span>
-              <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${Math.round(acc * 100)}%`, background: c }} />
+              <span className="text-[9px] text-zinc-600 capitalize w-14 shrink-0 truncate">{s.mode}</span>
+              {/* ✓ / ✗ / total */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <span className="text-[10px] font-mono tabular-nums" style={{ color: c }}>✓{s.correct}</span>
+                <span className="text-[9px] text-zinc-700 font-mono">✗{wrong}</span>
+                <span className="text-[9px] text-zinc-700 font-mono">/{s.n}</span>
+                <div className="flex-1 h-0.5 bg-zinc-800 rounded-full overflow-hidden ml-1">
+                  <div className="h-full rounded-full" style={{ width: `${Math.round(acc * 100)}%`, background: c }} />
+                </div>
               </div>
-              <span className="text-[9px] font-mono w-7 text-right shrink-0" style={{ color: c }}>
-                {Math.round(acc * 100)}%
-              </span>
-              <span className={`text-[9px] font-mono w-8 text-right shrink-0 ${isSlow ? "text-amber-600" : "text-zinc-700"}`}>
-                {s.avgTime.toFixed(1)}s
-              </span>
-              <span className="text-[9px] text-zinc-800 w-5 text-right shrink-0">{s.n}q</span>
+              <span className="text-[9px] font-mono text-zinc-700 shrink-0">{s.avgTime.toFixed(1)}s</span>
             </div>
           );
         })}
@@ -737,9 +736,9 @@ function WeaknessCards({ data, onDrill }: { data: PerfData; onDrill: (id: SkillI
 function SessionLog({ data, projections, onDelete }: {
   data: PerfData;
   projections: Array<{ ts: string; score: number; cumulativeN: number }>;
-  onDelete: (idx: number) => void;
+  onDelete: (ts: string) => void;  // [Fix] identify by ts, not index
 }) {
-  const [deleteIdx, setDeleteIdx] = useState<number | null>(null);
+  const [pendingTs, setPendingTs] = useState<string | null>(null);
   const valid   = data.sessions.filter(s => s.n > 0);
   const display = [...valid].reverse();
 
@@ -750,47 +749,57 @@ function SessionLog({ data, projections, onDelete }: {
   return (
     <div className="space-y-2">
       {display.map((s, dIdx) => {
-        const realIdx    = valid.length - 1 - dIdx;
-        const acc        = s.n ? Math.round(s.correct / s.n * 100) : 0;
-        const simScore   = s.correct - (s.n - s.correct);
-        const ts         = new Date(s.ts);
-        const dateStr    = ts.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-        const timeStr    = ts.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-        // Find matching projection snapshot
-        const proj = projections.find(p => p.ts === s.ts);
+        const acc      = s.n ? Math.round(s.correct / s.n * 100) : 0;
+        const wrong    = s.n - s.correct;
+        const simScore = s.correct - wrong;
+        const d        = new Date(s.ts);
+        const dateStr  = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        const timeStr  = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+        const proj     = projections.find(p => p.ts === s.ts);
         const dotColor = acc >= 85 ? "#10b981" : acc >= 70 ? "#f59e0b" : "#ef4444";
+        const isPending = pendingTs === s.ts;
 
         return (
-          <div key={dIdx}
-            className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
+          <div key={dIdx} className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl px-4 py-3">
+            <div className="flex items-start gap-3">
+              <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ background: dotColor }} />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-medium text-zinc-300 capitalize">{s.mode}</span>
-                  <span className="text-xs text-zinc-600">{dateStr} · {timeStr}</span>
+                  <span className="text-[10px] text-zinc-600">{dateStr} · {timeStr}</span>
                 </div>
-                <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-xs font-mono tabular-nums text-zinc-400">{s.n}q · {acc}%</span>
+                {/* ✓ / ✗ / total — primary stats */}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-mono font-semibold tabular-nums" style={{ color: dotColor }}>
+                    ✓{s.correct}
+                  </span>
+                  <span className="text-sm font-mono text-zinc-600 tabular-nums">✗{wrong}</span>
+                  <span className="text-xs text-zinc-700 font-mono">/{s.n}q</span>
+                  <span className="text-xs font-mono tabular-nums" style={{ color: dotColor }}>{acc}%</span>
                   {s.mode === "sim" && (
                     <span className="text-xs font-mono text-zinc-500">score {simScore}/80</span>
                   )}
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[10px] font-mono text-zinc-700">{s.avgTime.toFixed(1)}s/q</span>
                   {proj && (
-                    <span className="text-xs font-mono text-zinc-600">est. {proj.score}/80</span>
+                    <span className="text-[10px] font-mono text-zinc-700">est {proj.score}/80</span>
                   )}
-                  <span className="text-xs font-mono text-zinc-700">{s.avgTime.toFixed(1)}s/q</span>
+                  {(s.streak ?? 0) >= 5 && (
+                    <span className="text-[10px] text-amber-600 font-mono">{s.streak} streak</span>
+                  )}
                 </div>
               </div>
-              {deleteIdx === realIdx ? (
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => { onDelete(realIdx); setDeleteIdx(null); }}
-                    className="text-xs text-red-400 hover:text-red-300">confirm</button>
-                  <button onClick={() => setDeleteIdx(null)}
-                    className="text-xs text-zinc-600">cancel</button>
+              {isPending ? (
+                <div className="flex gap-2 shrink-0 pt-0.5">
+                  <button onClick={() => { onDelete(s.ts); setPendingTs(null); }}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors">confirm</button>
+                  <button onClick={() => setPendingTs(null)}
+                    className="text-xs text-zinc-600 transition-colors">cancel</button>
                 </div>
               ) : (
-                <button onClick={() => setDeleteIdx(realIdx)}
-                  className="text-xs text-zinc-700 hover:text-red-400 transition-colors shrink-0">
+                <button onClick={() => setPendingTs(s.ts)}
+                  className="text-xs text-zinc-700 hover:text-red-400 transition-colors shrink-0 pt-0.5">
                   ×
                 </button>
               )}
@@ -856,14 +865,10 @@ export default function Dashboard() {
     setSyncInput("");
   }
 
-  function handleDelete(idx: number) {
+  // [Fix] Delete by ts — avoids index confusion between filtered and unfiltered session arrays
+  function handleDelete(ts: string) {
     if (!data) return;
-    const sessionsBeforeFilter = [...data.sessions].filter(s => s.n > 0);
-    const sess = sessionsBeforeFilter[sessionsBeforeFilter.length - 1 - idx];
-    if (!sess) return;
-    const realIdx = data.sessions.indexOf(sess);
-    if (realIdx === -1) return;
-    deleteSession(data, realIdx);
+    deleteSessionByTs(data, ts);
     saveData(data);
     setData({ ...data });
   }

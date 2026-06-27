@@ -50,13 +50,15 @@ function DrillInner() {
   const startRef  = useRef<number>(Date.now());
   const qStartRef = useRef<number>(Date.now());
   const pauseRef  = useRef<number>(0);
-  // Track current attempts in a ref so handleExpire can access latest value
+  // [Fix] Use ref for attempts so finishSession always reads latest value (no closure staleness)
   const attemptsRef = useRef<AttemptRecord[]>([]);
   attemptsRef.current = attempts;
+  // [Improvement #2] Anti-repeat: track last 8 question texts to avoid duplicates
+  const recentQs = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    resetSessionState();
-    // If focus mode and skills pre-selected, jump straight to running
+    // [Improvement #1] Seed difficulty from history so we don't start cold
+    resetSessionState(dataRef.current);
     if (mode === "focus" && preSkills.length > 0) {
       setPhase("running");
     }
@@ -78,7 +80,17 @@ function DrillInner() {
       skillId    = next.skillId;
       difficulty = next.difficulty;
     }
-    const q = getQuestion(skillId, difficulty);
+    // [Improvement #2] Anti-repeat: regenerate up to 4 times to avoid recent duplicates
+    let q = getQuestion(skillId, difficulty);
+    for (let i = 0; i < 4; i++) {
+      if (!recentQs.current.has(q.text)) break;
+      q = getQuestion(skillId, difficulty);
+    }
+    recentQs.current.add(q.text);
+    if (recentQs.current.size > 10) {
+      const first = recentQs.current.values().next().value as string;
+      recentQs.current.delete(first);
+    }
     setCurrent({ q, skillId });
     setInput("");
     setFeedback(null);
@@ -160,10 +172,12 @@ function DrillInner() {
   }
 
   function finishSession(finalAttempts?: AttemptRecord[]) {
-    const all     = finalAttempts ?? attempts;
+    // [Fix] Use ref so this always reads the latest attempts, even if called before a re-render
+    const all     = finalAttempts ?? attemptsRef.current;
     const correct = all.filter(a => a.correct).length;
     const avgTime = all.length ? all.reduce((s, a) => s + a.elapsed, 0) / all.length : 0;
-    recordSession(dataRef.current, { mode, n: all.length, correct, avgTime });
+    // [Improvement #8] Pass attempts for streak calculation
+    recordSession(dataRef.current, { mode, n: all.length, correct, avgTime, attempts: all });
     saveData(dataRef.current);
     pushToCloud(dataRef.current);
     setPhase("done");

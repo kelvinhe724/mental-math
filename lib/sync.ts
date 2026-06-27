@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
-import { PerfData } from "./tracker";
+import { PerfData, mergeAttempts } from "./tracker";
+import { SKILL_IDS } from "./questions";
 
 function withTimeout<T>(thenable: PromiseLike<T>, ms: number): Promise<T | null> {
   return Promise.race([
@@ -65,27 +66,23 @@ export async function pullFromCloud(userId?: string): Promise<PerfData | null> {
   }
 }
 
-// Merge cloud + local: keep whichever has more attempts per skill
+// [Improvement #7] Merge cloud + local: deduplicate attempts by ts+elapsed key
+// Dedup sessions by ts; dedup attempts by (ts:elapsed) pair per skill
 export function mergeData(local: PerfData, cloud: PerfData): PerfData {
-  const merged: PerfData = {
-    sessions: [...cloud.sessions],
-    skills:   { ...cloud.skills },
-  };
-
-  // Add any local sessions not in cloud (by ts)
-  const cloudTs = new Set(cloud.sessions.map(s => s.ts));
-  for (const s of local.sessions) {
-    if (!cloudTs.has(s.ts)) merged.sessions.push(s);
+  // Merge sessions: union by ts, sorted chronologically
+  const sessionMap = new Map<string, typeof local.sessions[0]>();
+  for (const s of [...cloud.sessions, ...local.sessions]) {
+    if (!sessionMap.has(s.ts)) sessionMap.set(s.ts, s);
   }
-  merged.sessions.sort((a, b) => a.ts.localeCompare(b.ts));
+  const sessions = [...sessionMap.values()].sort((a, b) => a.ts.localeCompare(b.ts));
 
-  // For each skill, keep whichever side has more attempts
-  for (const skillId of Object.keys(local.skills) as (keyof typeof local.skills)[]) {
+  // Merge skills: dedup attempts by ts+elapsed key
+  const skills = {} as PerfData["skills"];
+  for (const skillId of SKILL_IDS) {
     const localAttempts = local.skills[skillId]?.attempts ?? [];
-    const cloudAttempts = merged.skills[skillId]?.attempts ?? [];
-    if (localAttempts.length > cloudAttempts.length) {
-      merged.skills[skillId] = local.skills[skillId];
-    }
+    const cloudAttempts = cloud.skills[skillId]?.attempts ?? [];
+    skills[skillId] = { attempts: mergeAttempts(localAttempts, cloudAttempts) };
   }
-  return merged;
+
+  return { sessions, skills };
 }
