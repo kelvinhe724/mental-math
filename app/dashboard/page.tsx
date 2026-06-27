@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  loadData, saveData, allSkillStats, skillStats, deleteSession,
+  loadData, saveData, allSkillStats, skillStats, skillStatsByDifficulty, deleteSession,
   resetAllData, PerfData, SkillStats, totalQuestions,
 } from "@/lib/tracker";
 import {
@@ -218,6 +218,126 @@ function TrajectoryChart({ points }: {
   );
 }
 
+// ── Session Panel ─────────────────────────────────────────────────────────────
+function SessionPanel({ data }: { data: PerfData }) {
+  const valid = data.sessions.filter(s => s.n > 0);
+  if (!valid.length) return null;
+  const display = [...valid].reverse().slice(0, 8);
+
+  return (
+    <div className="mb-10">
+      <div className="flex justify-between items-center mb-2.5">
+        <span className="text-[10px] text-zinc-600">session history</span>
+        <span className="text-[10px] text-zinc-800">{valid.length} total</span>
+      </div>
+      <div className="space-y-1">
+        {display.map((s, i) => {
+          const acc = s.n ? s.correct / s.n : 0;
+          const c   = acc >= 0.85 ? "#10b981" : acc >= 0.70 ? "#f59e0b" : "#ef4444";
+          const d   = new Date(s.ts);
+          const dateStr = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+          const isSlow  = s.avgTime > 7;
+          return (
+            <div key={i}
+              className="flex items-center gap-2 py-1.5 border-b border-zinc-800/30 last:border-0">
+              <span className="text-[9px] text-zinc-700 font-mono w-10 shrink-0">{dateStr}</span>
+              <span className="text-[9px] text-zinc-700 capitalize w-14 shrink-0 truncate">{s.mode}</span>
+              <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.round(acc * 100)}%`, background: c }} />
+              </div>
+              <span className="text-[9px] font-mono w-7 text-right shrink-0" style={{ color: c }}>
+                {Math.round(acc * 100)}%
+              </span>
+              <span className={`text-[9px] font-mono w-8 text-right shrink-0 ${isSlow ? "text-amber-600" : "text-zinc-700"}`}>
+                {s.avgTime.toFixed(1)}s
+              </span>
+              <span className="text-[9px] text-zinc-800 w-5 text-right shrink-0">{s.n}q</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Scatter Chart ─────────────────────────────────────────────────────────────
+function ScatterChart({ stats }: { stats: Record<SkillId, SkillStats> }) {
+  const W = 280, H = 140;
+  const pad = { t: 14, r: 22, b: 26, l: 28 };
+  const iW  = W - pad.l - pad.r;
+  const iH  = H - pad.t - pad.b;
+  const maxT = 10;
+
+  const xOf = (acc: number) => pad.l + acc * iW;
+  const yOf = (t: number)   => pad.t + (Math.min(t, maxT) / maxT) * iH;
+
+  const targetAcc = 0.85, targetSpd = 5.0;
+  const hasData = SKILL_IDS.some(id => stats[id].n > 0);
+  if (!hasData) return null;
+
+  return (
+    <div className="mb-10 bg-zinc-900/50 rounded-2xl border border-zinc-800/60 px-3 pt-3 pb-2">
+      <div className="flex justify-between px-1 mb-0.5">
+        <span className="text-[10px] text-zinc-600">accuracy vs speed · by skill</span>
+        <span className="text-[10px] text-zinc-700">top-right = target</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 150 }}>
+        {/* Target zone fill */}
+        <rect
+          x={xOf(targetAcc)} y={pad.t}
+          width={W - pad.r - xOf(targetAcc)}
+          height={yOf(targetSpd) - pad.t}
+          fill="#10b981" opacity={0.05} rx={2}
+        />
+        {/* Grid lines */}
+        {[0.25, 0.5, 0.75].map(v => (
+          <line key={v} x1={xOf(v)} y1={pad.t} x2={xOf(v)} y2={H - pad.b}
+            stroke="#27272a" strokeWidth={0.5} />
+        ))}
+        {[2.5, 5, 7.5].map(v => (
+          <line key={v} x1={pad.l} y1={yOf(v)} x2={W - pad.r} y2={yOf(v)}
+            stroke="#27272a" strokeWidth={0.5} />
+        ))}
+        {/* Axes */}
+        <line x1={pad.l} y1={H - pad.b} x2={W - pad.r} y2={H - pad.b} stroke="#3f3f46" strokeWidth={0.5} />
+        <line x1={pad.l} y1={pad.t}     x2={pad.l}     y2={H - pad.b} stroke="#3f3f46" strokeWidth={0.5} />
+        {/* Target lines */}
+        <line x1={xOf(targetAcc)} y1={pad.t} x2={xOf(targetAcc)} y2={H - pad.b}
+          stroke="#10b981" strokeWidth={0.5} strokeDasharray="2,3" opacity={0.4} />
+        <line x1={pad.l} y1={yOf(targetSpd)} x2={W - pad.r} y2={yOf(targetSpd)}
+          stroke="#10b981" strokeWidth={0.5} strokeDasharray="2,3" opacity={0.4} />
+        {/* Axis labels */}
+        <text x={W / 2}   y={H - 2} textAnchor="middle" fill="#3f3f46" fontSize={7}>accuracy →</text>
+        <text x={pad.l - 4} y={pad.t + 4}    textAnchor="end" fill="#3f3f46" fontSize={7}>fast</text>
+        <text x={pad.l - 4} y={H - pad.b - 2} textAnchor="end" fill="#3f3f46" fontSize={7}>slow</text>
+        <text x={xOf(0) + 2}    y={H - pad.b + 9} fill="#3f3f46" fontSize={7}>0%</text>
+        <text x={xOf(1) - 2}    y={H - pad.b + 9} textAnchor="end" fill="#3f3f46" fontSize={7}>100%</text>
+        <text x={W - pad.r - 2} y={pad.t + 8}     textAnchor="end" fill="#10b981" fontSize={6} opacity={0.45}>✓ 85%+, 5s−</text>
+        {/* Dots */}
+        {SKILL_IDS.map(id => {
+          const s = stats[id];
+          if (!s.n) return null;
+          const x = xOf(s.accuracy!);
+          const y = yOf(s.avgTime!);
+          const good = s.accuracy! >= targetAcc && s.avgTime! <= targetSpd;
+          const ok   = s.accuracy! >= 0.75;
+          const c    = good ? "#10b981" : ok ? "#f59e0b" : "#ef4444";
+          return (
+            <g key={id}>
+              <circle cx={x} cy={y} r={5} fill={c} opacity={0.88}
+                stroke="#09090b" strokeWidth={1} />
+              <text x={x} y={y - 8} textAnchor="middle" fill="#71717a" fontSize={7}>
+                {ABBR[id]}
+              </text>
+              <title>{SKILL_LABELS[id]}: {Math.round(s.accuracy! * 100)}% acc · {s.avgTime!.toFixed(1)}s avg</title>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 // ── Radar ──────────────────────────────────────────────────────────────────────
 const ABBR: Record<SkillId, string> = {
   add_sub:    "+/−", mul_1d: "×1d", mul_2d: "×2d", div: "÷",
@@ -419,6 +539,84 @@ function SkillTable({ stats, onDrill }: {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Difficulty Heatmap ────────────────────────────────────────────────────────
+const DIFF_ABBR: Record<SkillId, string> = {
+  add_sub: "Add/Sub", mul_1d: "×1-digit", mul_2d: "×2-digit", div: "Division",
+  percent: "Percent", frac_arith: "Fractions", frac_dec: "Frac↔Dec", mixed: "Mixed",
+};
+
+function cellStyle(s: SkillStats): { bg: string; text: string } {
+  if (!s.n) return { bg: "#18181b", text: "#3f3f46" };
+  const acc = s.accuracy!;
+  if (acc >= 0.90) return { bg: "#052e16", text: "#6ee7b7" };
+  if (acc >= 0.80) return { bg: "#112d0f", text: "#86efac" };
+  if (acc >= 0.70) return { bg: "#2d1600", text: "#fbbf24" };
+  return { bg: "#1f0a0a", text: "#fca5a5" };
+}
+
+function DifficultyHeatmap({ data }: { data: PerfData }) {
+  return (
+    <div className="mb-10">
+      <p className="text-[10px] text-zinc-600 mb-1">Accuracy by skill × difficulty</p>
+      <p className="text-[9px] text-zinc-700 mb-3">
+        Absolute difficulty varies — easy ×2d (e.g. 17×23) is harder than easy addition.
+      </p>
+
+      {/* Column headers */}
+      <div className="grid gap-x-1.5 mb-1.5"
+        style={{ gridTemplateColumns: "88px repeat(3, 1fr)" }}>
+        <div />
+        {["Easy", "Medium", "Hard"].map(d => (
+          <div key={d} className="text-[9px] text-zinc-700 text-center">{d}</div>
+        ))}
+      </div>
+
+      <div className="space-y-1.5">
+        {SKILL_IDS.map(id => {
+          const ds = skillStatsByDifficulty(data, id);
+          return (
+            <div key={id} className="grid items-center gap-x-1.5"
+              style={{ gridTemplateColumns: "88px repeat(3, 1fr)" }}>
+              <span className="text-[10px] text-zinc-500 truncate pr-1"
+                title={SKILL_LABELS[id]}>
+                {DIFF_ABBR[id]}
+              </span>
+              {([ds.easy, ds.medium, ds.hard] as SkillStats[]).map((s, i) => {
+                const { bg, text } = cellStyle(s);
+                const label = i === 0 ? "easy" : i === 1 ? "medium" : "hard";
+                return (
+                  <div key={label}
+                    className="h-7 rounded text-[10px] font-mono flex items-center justify-center gap-0.5"
+                    style={{ background: bg, color: text }}
+                    title={s.n ? `${Math.round(s.accuracy! * 100)}% · ${s.avgTime!.toFixed(1)}s · ${s.n} attempts` : "No data"}>
+                    {s.n ? `${Math.round(s.accuracy! * 100)}%` : "—"}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-3 mt-3 flex-wrap">
+        {[
+          { label: "≥90%",  bg: "#052e16", text: "#6ee7b7" },
+          { label: "80–90%",bg: "#112d0f", text: "#86efac" },
+          { label: "70–80%",bg: "#2d1600", text: "#fbbf24" },
+          { label: "<70%",  bg: "#1f0a0a", text: "#fca5a5" },
+          { label: "no data",bg:"#18181b", text: "#3f3f46" },
+        ].map(l => (
+          <div key={l.label} className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-sm" style={{ background: l.bg }} />
+            <span className="text-[8px] text-zinc-700">{l.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -730,11 +928,17 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Session panel */}
+          <SessionPanel data={data} />
+
           {/* Trajectory */}
           <div className="mb-2">
-            <p className="text-xs text-zinc-600 mb-2">Progress over time</p>
+            <p className="text-[10px] text-zinc-600 mb-2">Score trajectory</p>
             <TrajectoryChart points={projHistory} />
           </div>
+
+          {/* Scatter: accuracy vs speed */}
+          <ScatterChart stats={stats} />
 
           {/* Radar snapshot */}
           <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800/60 p-3 mb-10">
@@ -774,14 +978,10 @@ export default function Dashboard() {
       {/* ── Skills tab ─────────────────────────────────────────────────────── */}
       {tab === "skills" && (
         <>
-          <div className="mb-5">
-            <p className="text-xs text-zinc-600 mb-1">Tap any skill to expand. Red = below {Math.round(WEAK_ACC * 100)}% or {Math.round(TARGET_TIMES.medium * SLOW_MULT * 10) / 10}s+ avg.</p>
-          </div>
-          <SkillTable stats={stats} onDrill={handleDrill} />
+          <DifficultyHeatmap data={data} />
 
-          {/* Weakness focus */}
           <div className="mb-2">
-            <p className="text-xs text-zinc-600 mb-4">Priority focus areas</p>
+            <p className="text-[10px] text-zinc-600 mb-4">Priority focus areas</p>
             <WeaknessCards data={data} onDrill={handleDrill} />
           </div>
         </>

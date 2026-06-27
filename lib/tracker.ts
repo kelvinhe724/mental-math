@@ -116,3 +116,29 @@ export function resetAllData(): PerfData {
   saveData(fresh);
   return fresh;
 }
+
+export interface SkillDifficultyStats {
+  easy:   SkillStats;
+  medium: SkillStats;
+  hard:   SkillStats;
+}
+
+export function skillStatsByDifficulty(data: PerfData, skillId: SkillId): SkillDifficultyStats {
+  const all = data.skills[skillId].attempts;
+  function statsFor(diff: Difficulty): SkillStats {
+    const f = all.filter(a => a.difficulty === diff);
+    if (!f.length) return { accuracy: null, avgTime: null, n: 0 };
+    const correct = f.filter(a => a.correct).length;
+    return {
+      accuracy: correct / f.length,
+      avgTime: f.reduce((s, a) => s + a.elapsed, 0) / f.length,
+      n: f.length,
+    };
+  }
+  return { easy: statsFor("easy"), medium: statsFor("medium"), hard: statsFor("hard") };
+}
+
+export function lastSession(data: PerfData): SessionSummary | null {
+  const valid = data.sessions.filter(s => s.n > 0);
+  return valid.length ? valid[valid.length - 1] : null;
+}
