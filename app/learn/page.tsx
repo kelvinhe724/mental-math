@@ -27,7 +27,7 @@ function StrategyCard({ strategy, index }: { strategy: typeof GUIDES["add_sub"][
         className="w-full flex items-start gap-3 p-4 text-left hover:bg-zinc-800/30 transition-colors"
         onClick={() => setOpen(o => !o)}
       >
-        <span className="text-[11px] font-mono text-zinc-600 w-5 shrink-0 mt-0.5">{String(index + 1).padStart(2, "0")}</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-zinc-700 shrink-0 mt-[5px]" />
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium text-zinc-200">{strategy.title}</div>
           <div className="text-[11px] text-zinc-500 mt-0.5">{strategy.tagline}</div>
@@ -54,7 +54,7 @@ function StrategyCard({ strategy, index }: { strategy: typeof GUIDES["add_sub"][
 
           {/* Worked example */}
           <div className="mt-5 bg-zinc-900 rounded-lg p-4 border border-zinc-800/60">
-            <div className="text-[10px] uppercase tracking-widest text-zinc-600 mb-3">worked example</div>
+            <div className="text-[10px] text-zinc-500 font-mono mb-3">example</div>
             <div className="text-[20px] font-mono font-semibold text-zinc-100 mb-4">
               {strategy.example.problem}
             </div>
@@ -69,7 +69,7 @@ function StrategyCard({ strategy, index }: { strategy: typeof GUIDES["add_sub"][
               ))}
             </div>
             <div className="mt-3 pt-3 border-t border-zinc-800 flex items-center gap-2">
-              <span className="text-[11px] text-zinc-600">Answer</span>
+              <span className="text-[11px] text-zinc-500">Answer</span>
               <span className="text-[15px] font-mono font-bold text-amber-400">{strategy.example.answer}</span>
             </div>
           </div>

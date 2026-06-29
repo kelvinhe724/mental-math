@@ -45,11 +45,13 @@ function DrillInner() {
   const [qCount,      setQCount]      = useState(0);
   const [attempts,    setAttempts]    = useState<AttemptRecord[]>([]);
   const [paused,      setPaused]      = useState(false);
+  const [confirmExit, setConfirmExit] = useState(false);
 
-  const dataRef   = useRef<PerfData>(loadData());
-  const startRef  = useRef<number>(Date.now());
-  const qStartRef = useRef<number>(Date.now());
-  const pauseRef  = useRef<number>(0);
+  const dataRef         = useRef<PerfData>(loadData());
+  const startRef        = useRef<number>(Date.now());
+  const qStartRef       = useRef<number>(Date.now());
+  const pauseRef        = useRef<number>(0);
+  const confirmExitRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   // [Fix] Use ref for attempts so finishSession always reads latest value (no closure staleness)
   const attemptsRef = useRef<AttemptRecord[]>([]);
   attemptsRef.current = attempts;
@@ -183,6 +185,21 @@ function DrillInner() {
     setPhase("done");
   }
 
+  function handleExitTap() {
+    if (confirmExit) {
+      if (confirmExitRef.current) clearTimeout(confirmExitRef.current);
+      finishSession();
+    } else {
+      setConfirmExit(true);
+      confirmExitRef.current = setTimeout(() => setConfirmExit(false), 2500);
+    }
+  }
+
+  // Cleanup confirm-exit timer on unmount
+  useEffect(() => {
+    return () => { if (confirmExitRef.current) clearTimeout(confirmExitRef.current); };
+  }, []);
+
   function togglePause() {
     if (!paused) {
       pauseRef.current = Date.now();
@@ -201,7 +218,7 @@ function DrillInner() {
       <main className="max-w-md mx-auto px-4 pt-8 pb-8">
         <button onClick={() => router.push("/")} className="text-zinc-400 text-sm mb-6 block">← back</button>
         <h2 className="text-xl font-bold mb-1">Focus drill</h2>
-        <p className="text-zinc-600 text-sm mb-5">Pick one or more skills to drill intensively.</p>
+        <p className="text-zinc-500 text-sm mb-5">Pick one or more skills to drill intensively.</p>
         <div className="space-y-2 mb-6">
           {SKILL_IDS.map(s => (
             <button key={s}
@@ -220,7 +237,7 @@ function DrillInner() {
         <button
           disabled={!focusSkills.length}
           onClick={() => setPhase("running")}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-700 disabled:text-zinc-500 rounded-2xl py-4 font-bold text-lg transition-colors">
+          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-800 disabled:text-zinc-400 rounded-2xl py-4 font-bold text-lg transition-colors">
           Start
         </button>
       </main>
@@ -272,7 +289,7 @@ function DrillInner() {
         </div>
 
         {(skipped > 0 || timeout > 0) && (
-          <div className="flex gap-3 mb-4 text-xs text-zinc-600">
+          <div className="flex gap-3 mb-4 text-xs text-zinc-500">
             {skipped > 0 && <span>{skipped} skipped</span>}
             {timeout > 0 && <span>{timeout} timed out</span>}
           </div>
@@ -280,23 +297,23 @@ function DrillInner() {
 
         {missed.length > 0 && (
           <div className="mb-6">
-            <p className="text-xs text-zinc-600 mb-2">{missed.length} missed</p>
+            <p className="text-xs text-zinc-500 mb-2">{missed.length} missed</p>
             <div className="space-y-2">
               {missed.slice(0, 8).map((a, i) => (
                 <div key={i} className="bg-zinc-900 rounded-xl px-4 py-3 text-sm border border-zinc-800">
                   <span className="text-zinc-300">{a.question}</span>
-                  <span className="text-zinc-600 mx-2">=</span>
+                  <span className="text-zinc-500 mx-2">=</span>
                   <span className="text-emerald-400 font-mono">{String(a.answer)}</span>
                   {a.userAnswer === "skip"
-                    ? <span className="text-zinc-700 ml-2 text-xs">skipped</span>
+                    ? <span className="text-zinc-500 ml-2 text-xs">skipped</span>
                     : a.userAnswer
-                      ? <span className="text-zinc-600 ml-2">(you: {a.userAnswer})</span>
-                      : <span className="text-zinc-700 ml-2 text-xs">timeout</span>
+                      ? <span className="text-zinc-500 ml-2">(you: {a.userAnswer})</span>
+                      : <span className="text-zinc-500 ml-2 text-xs">timeout</span>
                   }
                 </div>
               ))}
               {missed.length > 8 && (
-                <p className="text-xs text-zinc-600 px-1">+{missed.length - 8} more</p>
+                <p className="text-xs text-zinc-500 px-1">+{missed.length - 8} more</p>
               )}
             </div>
           </div>
@@ -328,13 +345,19 @@ function DrillInner() {
     feedback === "wrong"   ? "text-red-400"     : "";
 
   return (
-    <main className="max-w-md mx-auto flex flex-col px-4 md:max-w-xl"
+    <main className="max-w-md mx-auto flex flex-col px-4 md:max-w-2xl"
       style={{ height: "100dvh", paddingTop: "env(safe-area-inset-top, 12px)", paddingBottom: "env(safe-area-inset-bottom, 12px)" }}>
 
       {/* Header */}
       <div className="flex items-center justify-between py-3 shrink-0">
-        <button onClick={() => finishSession()}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+        <button
+          onClick={handleExitTap}
+          title={confirmExit ? "Tap again to end session" : "End session"}
+          className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors text-sm
+            ${confirmExit
+              ? "bg-red-950/60 border border-red-800/50 text-red-400 hover:bg-red-900/60"
+              : "bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white"
+            }`}>
           ✕
         </button>
         <div className="flex items-center gap-2 bg-zinc-900 rounded-full px-4 py-1.5 border border-zinc-800">
@@ -342,7 +365,7 @@ function DrillInner() {
             ? <Timer totalSecs={durSecs} onExpire={handleExpire} running={phase === "running"} />
             : <span className="text-zinc-500 text-sm">open</span>
           }
-          <span className="text-zinc-700 text-xs">·</span>
+          <span className="text-zinc-500 text-xs">·</span>
           <span className="text-zinc-400 text-sm font-medium">Q{qCount + (feedback ? 0 : 1)}</span>
         </div>
         <button onClick={togglePause}
