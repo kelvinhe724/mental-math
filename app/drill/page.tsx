@@ -200,6 +200,17 @@ function DrillInner() {
     return () => { if (confirmExitRef.current) clearTimeout(confirmExitRef.current); };
   }, []);
 
+  // Guard against navigate-away mid-drill (prevent accidental data loss)
+  useEffect(() => {
+    if (phase !== "running") return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [phase]);
+
   function togglePause() {
     if (!paused) {
       pauseRef.current = Date.now();
@@ -215,31 +226,56 @@ function DrillInner() {
   // ── Focus skill picker ─────────────────────────────────────────────────────
   if (phase === "focus-pick") {
     return (
-      <main className="max-w-md mx-auto px-4 pt-8 pb-8">
-        <button onClick={() => router.push("/")} className="text-zinc-400 text-sm mb-6 block">← back</button>
-        <h2 className="text-xl font-bold mb-1">Focus drill</h2>
-        <p className="text-zinc-500 text-sm mb-5">Pick one or more skills to drill intensively.</p>
-        <div className="space-y-2 mb-6">
-          {SKILL_IDS.map(s => (
-            <button key={s}
-              onClick={() => setFocusSkills(prev =>
-                prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
-              )}
-              className={`w-full text-left px-4 py-3 rounded-xl transition-colors font-medium text-sm ${
-                focusSkills.includes(s)
-                  ? "bg-emerald-900/60 border border-emerald-700/60 text-emerald-300"
-                  : "bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300"
-              }`}>
-              {SKILL_LABELS[s]}
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        <div className="max-w-md md:max-w-2xl mx-auto px-4"
+          style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 24px)", paddingBottom: 48 }}>
+
+          {/* Header — mirrors active drill header */}
+          <div className="flex items-center justify-between py-3 mb-6">
+            <button
+              onClick={() => router.push("/")}
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-sm">
+              ←
             </button>
-          ))}
+            <div className="text-center">
+              <div className="text-sm font-semibold text-zinc-200">Focus Drill</div>
+              <div className="text-[10px] text-zinc-500 mt-0.5">select skills to drill</div>
+            </div>
+            <div className="w-9" />
+          </div>
+
+          {/* Skills grid */}
+          <div className="grid grid-cols-2 gap-2.5 mb-6">
+            {SKILL_IDS.map(s => {
+              const sel = focusSkills.includes(s);
+              return (
+                <button key={s}
+                  onClick={() => setFocusSkills(prev =>
+                    sel ? prev.filter(x => x !== s) : [...prev, s]
+                  )}
+                  className={`text-left px-4 py-4 rounded-2xl border transition-all ${
+                    sel
+                      ? "bg-emerald-950/50 border-emerald-700/60 hover:bg-emerald-950/70"
+                      : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"
+                  }`}>
+                  <div className={`text-sm font-medium ${sel ? "text-emerald-300" : "text-zinc-300"}`}>
+                    {SKILL_LABELS[s]}
+                  </div>
+                  {sel && <div className="text-[10px] text-emerald-600 mt-1">selected ✓</div>}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            disabled={!focusSkills.length}
+            onClick={() => setPhase("running")}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-800 disabled:text-zinc-400 rounded-2xl py-4 font-bold text-lg transition-colors">
+            {focusSkills.length
+              ? `Start · ${focusSkills.length} skill${focusSkills.length > 1 ? "s" : ""}`
+              : "Select a skill to begin"}
+          </button>
         </div>
-        <button
-          disabled={!focusSkills.length}
-          onClick={() => setPhase("running")}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-800 disabled:text-zinc-400 rounded-2xl py-4 font-bold text-lg transition-colors">
-          Start
-        </button>
       </main>
     );
   }
@@ -327,7 +363,7 @@ function DrillInner() {
         <div className="flex gap-3">
           <button onClick={() => router.push("/dashboard")}
             className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-2xl py-3 font-medium text-sm transition-colors text-zinc-300">
-            Coach Report
+            Dashboard
           </button>
           <button onClick={() => router.push("/")}
             className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-2xl py-3 font-medium text-sm transition-colors text-zinc-300">

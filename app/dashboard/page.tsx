@@ -108,7 +108,7 @@ function ScoreHero({ proj }: { proj: OptiverProjection }) {
         {[
           { label: "speed",      val: `${proj.avgSpeed.toFixed(1)}s` },
           { label: "accuracy",   val: `${Math.round(proj.avgAcc * 100)}%` },
-          { label: "answerable", val: String(proj.answerable) },
+          { label: "proj. correct", val: String(proj.answerable) },
           { label: "skills",     val: `${proj.coveredSkills}/8` },
         ].map(({ label, val }) => (
           <div key={label} className="bg-zinc-900/60 rounded-xl p-2.5 border border-zinc-800/60 text-center">
@@ -846,7 +846,35 @@ export default function Dashboard() {
     [data ? data.sessions.length : 0]
   );
 
-  if (!data || !stats) return null;
+  if (!data || !stats) {
+    return (
+      <main className="max-w-md mx-auto px-4 pt-6 pb-20 md:max-w-4xl">
+        <div className="flex items-center justify-between mb-6">
+          <div className="h-4 w-12 bg-zinc-800/60 rounded animate-pulse" />
+          <div className="h-4 w-24 bg-zinc-800/60 rounded animate-pulse" />
+          <div className="h-4 w-10 bg-zinc-800/60 rounded animate-pulse" />
+        </div>
+        <div className="flex gap-0.5 bg-zinc-900 rounded-xl p-1 mb-7 border border-zinc-800/60">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="flex-1 h-7 bg-zinc-800/40 rounded-lg animate-pulse" />
+          ))}
+        </div>
+        <div className="mb-10">
+          <div className="h-20 w-40 bg-zinc-900/60 rounded-xl animate-pulse mb-4" />
+          <div className="flex gap-2 mb-5">
+            <div className="h-6 w-16 bg-zinc-900/40 rounded-full animate-pulse" />
+            <div className="h-6 w-20 bg-zinc-900/40 rounded-full animate-pulse" />
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            {[1,2,3,4].map(i => (
+              <div key={i} className="h-16 bg-zinc-900/40 rounded-xl animate-pulse border border-zinc-800/60" />
+            ))}
+          </div>
+        </div>
+        <div className="h-24 bg-zinc-900/40 rounded-2xl animate-pulse border border-zinc-800/60" />
+      </main>
+    );
+  }
 
   // ── Event handlers ──────────────────────────────────────────────────────────
   async function handleLinkDevice() {
@@ -902,7 +930,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <Link href="/" className="text-zinc-600 text-sm hover:text-zinc-300 transition-colors">← home</Link>
-        <h1 className="text-base font-semibold tracking-tight text-zinc-200">Coach Report</h1>
+        <h1 className="text-base font-semibold tracking-tight text-zinc-200">Dashboard</h1>
         <span className="text-xs text-zinc-700 font-mono">{total} reps</span>
       </div>
 
