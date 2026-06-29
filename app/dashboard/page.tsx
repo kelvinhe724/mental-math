@@ -36,15 +36,20 @@ function useCountUp(target: number, duration = 900) {
   const [val, setVal] = useState(0);
   const frame = useRef<number>(0);
   useEffect(() => {
+    if (typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setVal(target);
+      return;
+    }
     setVal(0);
     const start = Date.now();
-    const animate = () => {
+    const tick = () => {
       const t = Math.min((Date.now() - start) / duration, 1);
       const eased = 1 - Math.pow(1 - t, 3);
       setVal(Math.round(eased * target));
-      if (t < 1) frame.current = requestAnimationFrame(animate);
+      if (t < 1) frame.current = requestAnimationFrame(tick);
     };
-    frame.current = requestAnimationFrame(animate);
+    frame.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame.current);
   }, [target, duration]);
   return val;

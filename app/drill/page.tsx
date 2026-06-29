@@ -290,7 +290,7 @@ function DrillInner() {
     const simScore = correct - (attempts.length - correct);
 
     return (
-      <main className="max-w-md mx-auto px-4 pt-8 pb-8">
+      <main className="slide-up max-w-md mx-auto px-4 pt-8 pb-8">
         <h2 className="text-2xl font-bold mb-1">Done</h2>
         <p className="text-zinc-500 text-sm mb-6">Progress saved</p>
 
@@ -425,7 +425,7 @@ function DrillInner() {
       {phase === "running" && current && (
         <>
           <div className="flex-1 flex flex-col justify-between pt-2">
-            <div>
+            <div key={current.q.text} className="question-enter">
               <p className="text-xs font-medium text-zinc-600 mb-4 tracking-wide">
                 {SKILL_LABELS[current.skillId]}
               </p>
@@ -436,7 +436,7 @@ function DrillInner() {
                 <p className="text-sm text-zinc-500 mb-2">{current.q.subtext}</p>
               )}
               {feedback && (
-                <div className={`mt-2 text-base font-semibold ${feedbackColor}`}>
+                <div key={feedback} className={`feedback-pop mt-2 text-base font-semibold ${feedbackColor}`}>
                   {feedback === "correct" && "✓ Correct"}
                   {feedback === "skip"    && "→ Skipped"}
                   {feedback === "wrong" && (
