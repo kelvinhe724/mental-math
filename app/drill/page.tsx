@@ -399,7 +399,7 @@ function DrillInner() {
         <div className="flex items-center gap-2 bg-zinc-900 rounded-full px-4 py-1.5 border border-zinc-800">
           {durSecs
             ? <Timer totalSecs={durSecs} onExpire={handleExpire} running={phase === "running"} />
-            : <span className="text-zinc-500 text-sm">open</span>
+            : <span className="text-zinc-500 text-sm">untimed</span>
           }
           <span className="text-zinc-500 text-xs">·</span>
           <span className="text-zinc-400 text-sm font-medium">Q{qCount + (feedback ? 0 : 1)}</span>

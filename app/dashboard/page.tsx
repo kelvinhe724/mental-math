@@ -278,7 +278,7 @@ function ScatterChart({ stats }: { stats: Record<SkillId, SkillStats> }) {
     <div className="mb-10 bg-zinc-900/50 rounded-2xl border border-zinc-800/60 px-3 pt-3 pb-2">
       <div className="flex justify-between px-1 mb-0.5">
         <span className="text-[10px] text-zinc-600">accuracy vs speed · by skill</span>
-        <span className="text-[10px] text-zinc-700">top-right = target</span>
+        <span className="text-[10px] text-zinc-700">top-right = mastered</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 150 }}>
         {/* Target zone fill */}
@@ -562,7 +562,7 @@ function DifficultyHeatmap({ data }: { data: PerfData }) {
     <div className="mb-10">
       <p className="text-[10px] text-zinc-600 mb-1">Accuracy by skill × difficulty</p>
       <p className="text-[9px] text-zinc-700 mb-3">
-        Absolute difficulty varies — easy ×2d (e.g. 17×23) is harder than easy addition.
+        Absolute difficulty varies — easy 2-digit multiplication (17×23) can be harder than easy addition.
       </p>
 
       {/* Column headers */}
@@ -661,7 +661,7 @@ function WeaknessCards({ data, onDrill }: { data: PerfData; onDrill: (id: SkillI
               <div>
                 <div className="text-sm font-semibold text-zinc-100">{SKILL_LABELS[skillId]}</div>
                 <div className="text-xs text-zinc-600 mt-0.5">
-                  {s.n} attempts · {Math.round(currentImpact * 10) / 10} impact score
+                  {s.n} attempts
                 </div>
               </div>
               <span className={`text-[9px] font-bold px-2 py-1 rounded-full tracking-widest ${
@@ -722,7 +722,7 @@ function WeaknessCards({ data, onDrill }: { data: PerfData; onDrill: (id: SkillI
               <button
                 onClick={() => onDrill(skillId)}
                 className="w-full text-xs py-1.5 text-emerald-500 hover:text-emerald-400 font-medium text-left transition-colors">
-                → Focus drill on {SKILL_LABELS[skillId]}
+                Drill this skill →
               </button>
             </div>
           </div>
@@ -929,7 +929,7 @@ export default function Dashboard() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <Link href="/" className="text-zinc-600 text-sm hover:text-zinc-300 transition-colors">← home</Link>
+        <Link href="/" className="text-zinc-600 text-sm hover:text-zinc-300 transition-colors">← Home</Link>
         <h1 className="text-base font-semibold tracking-tight text-zinc-200">Dashboard</h1>
         <span className="text-xs text-zinc-700 font-mono">{total} reps</span>
       </div>
@@ -1086,7 +1086,7 @@ export default function Dashboard() {
             <p className="text-xs text-zinc-500 mb-3">Data</p>
             {confirmReset ? (
               <div className="bg-red-950/30 rounded-xl p-3 border border-red-900/30">
-                <p className="text-xs text-red-300 mb-3">Delete ALL history? This cannot be undone.</p>
+                <p className="text-xs text-red-300 mb-3">Delete all history? This can't be undone.</p>
                 <div className="flex gap-2">
                   <button onClick={handleReset}
                     className="flex-1 bg-red-700 hover:bg-red-600 rounded-lg py-2 text-xs font-semibold text-white transition-colors">

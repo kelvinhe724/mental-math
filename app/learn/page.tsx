@@ -241,7 +241,7 @@ function PracticeZone({ skillId }: { skillId: SkillId }) {
                 {correct === false && (
                   <>
                     <span className="text-red-400 text-[13px]">✗</span>
-                    <span className="text-zinc-500 text-[13px]">correct: <span className="font-mono text-zinc-300">{String(q.answer)}</span></span>
+                    <span className="text-zinc-500 text-[13px]">Correct: <span className="font-mono text-zinc-300">{String(q.answer)}</span></span>
                   </>
                 )}
               </div>
@@ -271,7 +271,7 @@ function PracticeZone({ skillId }: { skillId: SkillId }) {
                   onClick={nextQ}
                   className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-[13px] rounded-lg transition-colors"
                 >
-                  Next question →
+                  Next →
                 </button>
               </div>
             </>
@@ -300,7 +300,7 @@ export default function LearnPage() {
             <h1 className="text-[22px] font-semibold text-zinc-100 tracking-tight">Strategy Guide</h1>
           </div>
           <Link href="/" className="text-[12px] text-zinc-600 hover:text-zinc-400 transition-colors">
-            ← home
+            ← Home
           </Link>
         </div>
 
