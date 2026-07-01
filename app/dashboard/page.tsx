@@ -141,6 +141,8 @@ function ScoreHero({ proj }: { proj: OptiverProjection }) {
 function TrajectoryChart({ points }: {
   points: Array<{ ts: string; score: number; cumulativeN: number }>;
 }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
   if (points.length < 2) return (
     <div className="border border-zinc-800/60 rounded-2xl px-4 py-6 text-center text-xs text-zinc-600 mb-10">
       Complete more sessions to see your progress trajectory
@@ -161,6 +163,13 @@ function TrajectoryChart({ points }: {
   const milestones = [
     { v: 35, c: "#ef4444" }, { v: 55, c: "#10b981" }, { v: 70, c: "#f59e0b" },
   ];
+
+  // Tooltip positioning
+  const TW = 84, TH = 42;
+  const hovX  = hovered !== null ? xOf(hovered) : 0;
+  const hovY  = hovered !== null ? yOf(points[hovered].score) : 0;
+  const tipX  = Math.min(Math.max(hovX - TW / 2, pad.l), W - pad.r - TW);
+  const tipY  = (hovY - TH - 6) >= pad.t ? hovY - TH - 6 : hovY + 8;
 
   return (
     <div className="mb-10">
@@ -183,6 +192,11 @@ function TrajectoryChart({ points }: {
               </g>
             );
           })}
+          {/* Hover crosshair */}
+          {hovered !== null && (
+            <line x1={hovX} y1={pad.t} x2={hovX} y2={H - pad.b}
+              stroke="#52525b" strokeWidth={0.75} strokeDasharray="2,2" />
+          )}
           {/* Area fill */}
           <defs>
             <linearGradient id="traj-fill" x1="0" y1="0" x2="0" y2="1">
@@ -202,17 +216,44 @@ function TrajectoryChart({ points }: {
             const x = xOf(i), y = yOf(p.score);
             const c = scoreColor(p.score);
             const isLast = i === points.length - 1;
+            const isHov  = hovered === i;
             return (
-              <g key={i}>
-                <circle cx={x} cy={y} r={isLast ? 4 : 2.5}
-                  fill={c} stroke="#09090b" strokeWidth={isLast ? 1.5 : 1} />
-                {isLast && (
+              <g key={i} className="cursor-pointer"
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered(null)}>
+                {/* Transparent hit-area so thin lines are easy to hover */}
+                <circle cx={x} cy={y} r={10} fill="transparent" />
+                {/* Glow ring on hover */}
+                {isHov && <circle cx={x} cy={y} r={9} fill={c} opacity={0.12} />}
+                <circle cx={x} cy={y}
+                  r={isHov ? 5 : isLast ? 4 : 2.5}
+                  fill={c} stroke="#09090b" strokeWidth={isHov ? 2 : isLast ? 1.5 : 1} />
+                {isLast && !isHov && (
                   <circle cx={x} cy={y} r={7} fill="none" stroke={c} strokeWidth={0.5} opacity={0.4} />
                 )}
-                <title>{new Date(p.ts).toLocaleDateString()} · Est. {p.score}/80 · {p.cumulativeN} total attempts</title>
               </g>
             );
           })}
+          {/* Hover tooltip */}
+          {hovered !== null && (
+            <g pointerEvents="none">
+              <rect x={tipX} y={tipY} width={TW} height={TH}
+                rx={4} fill="#18181b" stroke="#3f3f46" strokeWidth={0.75} />
+              <text x={tipX + TW / 2} y={tipY + 12} textAnchor="middle"
+                fill="#71717a" fontSize={7}>
+                {new Date(points[hovered].ts).toLocaleDateString(undefined,
+                  { month: "short", day: "numeric" })}
+              </text>
+              <text x={tipX + TW / 2} y={tipY + 27} textAnchor="middle"
+                fill={scoreColor(points[hovered].score)} fontSize={12} fontWeight="700">
+                {points[hovered].score}/80
+              </text>
+              <text x={tipX + TW / 2} y={tipY + 38} textAnchor="middle"
+                fill="#52525b" fontSize={6.5}>
+                {points[hovered].cumulativeN} total reps
+              </text>
+            </g>
+          )}
         </svg>
         <div className="flex justify-between text-[9px] text-zinc-700 mt-0.5 px-1">
           <span>{new Date(points[0].ts).toLocaleDateString()}</span>
@@ -266,6 +307,8 @@ function SessionPanel({ data }: { data: PerfData }) {
 
 // ── Scatter Chart ─────────────────────────────────────────────────────────────
 function ScatterChart({ stats }: { stats: Record<SkillId, SkillStats> }) {
+  const [hovered, setHovered] = useState<SkillId | null>(null);
+
   const W = 280, H = 140;
   const pad = { t: 14, r: 22, b: 26, l: 28 };
   const iW  = W - pad.l - pad.r;
@@ -326,17 +369,56 @@ function ScatterChart({ stats }: { stats: Record<SkillId, SkillStats> }) {
           const good = s.accuracy! >= targetAcc && s.avgTime! <= targetSpd;
           const ok   = s.accuracy! >= 0.75;
           const c    = good ? "#10b981" : ok ? "#f59e0b" : "#ef4444";
+          const isHov = hovered === id;
           return (
-            <g key={id}>
-              <circle cx={x} cy={y} r={5} fill={c} opacity={0.88}
-                stroke="#09090b" strokeWidth={1} />
-              <text x={x} y={y - 8} textAnchor="middle" fill="#71717a" fontSize={7}>
-                {ABBR[id]}
-              </text>
-              <title>{SKILL_LABELS[id]}: {Math.round(s.accuracy! * 100)}% acc · {s.avgTime!.toFixed(1)}s avg</title>
+            <g key={id} className="cursor-pointer"
+              onMouseEnter={() => setHovered(id)}
+              onMouseLeave={() => setHovered(null)}>
+              {/* Expanded hit area */}
+              <circle cx={x} cy={y} r={12} fill="transparent" />
+              {/* Glow on hover */}
+              {isHov && <circle cx={x} cy={y} r={10} fill={c} opacity={0.12} />}
+              <circle cx={x} cy={y} r={isHov ? 7 : 5} fill={c} opacity={0.88}
+                stroke="#09090b" strokeWidth={isHov ? 1.5 : 1} />
+              {!isHov && (
+                <text x={x} y={y - 8} textAnchor="middle" fill="#71717a" fontSize={7}>
+                  {ABBR[id]}
+                </text>
+              )}
             </g>
           );
         })}
+        {/* Hover tooltip — rendered above all dots */}
+        {hovered !== null && (() => {
+          const s = stats[hovered];
+          if (!s?.n) return null;
+          const x = xOf(s.accuracy!);
+          const y = yOf(s.avgTime!);
+          const good = s.accuracy! >= targetAcc && s.avgTime! <= targetSpd;
+          const ok   = s.accuracy! >= 0.75;
+          const c    = good ? "#10b981" : ok ? "#f59e0b" : "#ef4444";
+          const TW = 98, TH = 46;
+          const tipX = Math.min(Math.max(x - TW / 2, pad.l), W - pad.r - TW);
+          const tipY = (y - TH - 8) >= pad.t ? y - TH - 8 : y + 10;
+          return (
+            <g pointerEvents="none">
+              <rect x={tipX} y={tipY} width={TW} height={TH}
+                rx={4} fill="#18181b" stroke="#3f3f46" strokeWidth={0.75} />
+              <text x={tipX + TW / 2} y={tipY + 13} textAnchor="middle"
+                fill="#d4d4d8" fontSize={8} fontWeight="600">
+                {SKILL_LABELS[hovered]}
+              </text>
+              <text x={tipX + TW / 2} y={tipY + 27} textAnchor="middle"
+                fill={c} fontSize={7.5}>
+                {Math.round(s.accuracy! * 100)}% acc · {s.avgTime!.toFixed(1)}s avg
+              </text>
+              <text x={tipX + TW / 2} y={tipY + 39} textAnchor="middle"
+                fill="#52525b" fontSize={6.5}>
+                {s.n} attempts
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );
@@ -353,6 +435,7 @@ function Radar({ stats, onSelect, selected }: {
   onSelect: (id: SkillId | null) => void;
   selected: SkillId | null;
 }) {
+  const [hoveredSkill, setHoveredSkill] = useState<SkillId | null>(null);
   const N = SKILL_IDS.length;
   const cx = 110, cy = 110, maxR = 78;
   const angles = SKILL_IDS.map((_, i) => (i * 2 * Math.PI) / N - Math.PI / 2);
@@ -393,17 +476,53 @@ function Radar({ stats, onSelect, selected }: {
         const acc = stats[id]?.accuracy ?? 0;
         const c   = acc >= 0.9 ? "#10b981" : acc >= 0.75 ? "#f59e0b" : acc > 0 ? "#ef4444" : "#3f3f46";
         const isSelected = selected === id;
+        const isHov      = hoveredSkill === id;
         return (
-          <g key={id} onClick={() => onSelect(isSelected ? null : id)} className="cursor-pointer">
-            <circle cx={x} cy={y} r={isSelected ? 5 : 3.5}
-              fill={c} stroke="#0a0a0e" strokeWidth={isSelected ? 2 : 1.5}
-            />
-            {isSelected && (
+          <g key={id}
+            onClick={() => onSelect(isSelected ? null : id)}
+            onMouseEnter={() => setHoveredSkill(id)}
+            onMouseLeave={() => setHoveredSkill(null)}
+            className="cursor-pointer">
+            {/* Expanded hit area */}
+            <circle cx={x} cy={y} r={12} fill="transparent" />
+            {/* Ring on hover or selected */}
+            {(isHov || isSelected) && (
               <circle cx={x} cy={y} r={9} fill="none" stroke={c} strokeWidth={0.8} opacity={0.4} />
             )}
+            <circle cx={x} cy={y}
+              r={isSelected ? 5 : isHov ? 4.5 : 3.5}
+              fill={c} stroke="#0a0a0e" strokeWidth={isSelected ? 2 : 1.5}
+            />
           </g>
         );
       })}
+      {/* Center preview — hover shows quick stats, click locks selection */}
+      {(hoveredSkill || selected) && (() => {
+        const id  = hoveredSkill ?? selected!;
+        const acc = stats[id]?.accuracy ?? 0;
+        const spd = stats[id]?.avgTime  ?? 0;
+        const n   = stats[id]?.n        ?? 0;
+        const c   = acc >= 0.9 ? "#10b981" : acc >= 0.75 ? "#f59e0b" : acc > 0 ? "#ef4444" : "#3f3f46";
+        return (
+          <g pointerEvents="none">
+            <circle cx={cx} cy={cy} r={22} fill="#09090b" opacity={0.75} />
+            <text x={cx} y={cy - 7} textAnchor="middle" dominantBaseline="middle"
+              fill="#52525b" fontSize={7.5} fontWeight="600">
+              {ABBR[id]}
+            </text>
+            <text x={cx} y={cy + 5} textAnchor="middle" dominantBaseline="middle"
+              fill={n ? c : "#3f3f46"} fontSize={13} fontWeight="700">
+              {n ? `${Math.round(acc * 100)}%` : "—"}
+            </text>
+            {n > 0 && spd > 0 && (
+              <text x={cx} y={cy + 17} textAnchor="middle" dominantBaseline="middle"
+                fill="#3f3f46" fontSize={6.5}>
+                {spd.toFixed(1)}s
+              </text>
+            )}
+          </g>
+        );
+      })()}
       {/* Labels */}
       {SKILL_IDS.map((id, i) => {
         const [x, y] = pt(i, maxR + 17);
