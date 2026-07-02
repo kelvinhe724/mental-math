@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useCallback, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Numpad from "@/components/Numpad";
 import Timer from "@/components/Timer";
@@ -46,6 +46,7 @@ function DrillInner() {
   const [attempts,    setAttempts]    = useState<AttemptRecord[]>([]);
   const [paused,      setPaused]      = useState(false);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [qElapsed,    setQElapsed]    = useState(0);
 
   const dataRef         = useRef<PerfData>(loadData());
   const startRef        = useRef<number>(Date.now());
@@ -200,6 +201,34 @@ function DrillInner() {
     return () => { if (confirmExitRef.current) clearTimeout(confirmExitRef.current); };
   }, []);
 
+  // Guard against navigate-away mid-drill (prevent accidental data loss)
+  useEffect(() => {
+    if (phase !== "running") return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [phase]);
+
+  // Per-question live timer — ticks at 100ms while question is active, resets on new question
+  useEffect(() => {
+    if (phase !== "running" || feedback !== null) return;
+    const id = setInterval(() => {
+      setQElapsed((Date.now() - qStartRef.current) / 1000);
+    }, 100);
+    return () => clearInterval(id);
+  }, [current, phase, feedback]);
+
+  // Running session stats derived from all answered attempts
+  const sessionStats = useMemo(() => {
+    if (!attempts.length) return null;
+    const times = attempts.map(a => a.elapsed);
+    const avg   = times.reduce((s, t) => s + t, 0) / times.length;
+    return { count: attempts.length, avg, min: Math.min(...times), max: Math.max(...times) };
+  }, [attempts]);
+
   function togglePause() {
     if (!paused) {
       pauseRef.current = Date.now();
@@ -215,31 +244,56 @@ function DrillInner() {
   // ── Focus skill picker ─────────────────────────────────────────────────────
   if (phase === "focus-pick") {
     return (
-      <main className="max-w-md mx-auto px-4 pt-8 pb-8">
-        <button onClick={() => router.push("/")} className="text-zinc-400 text-sm mb-6 block">← back</button>
-        <h2 className="text-xl font-bold mb-1">Focus drill</h2>
-        <p className="text-zinc-500 text-sm mb-5">Pick one or more skills to drill intensively.</p>
-        <div className="space-y-2 mb-6">
-          {SKILL_IDS.map(s => (
-            <button key={s}
-              onClick={() => setFocusSkills(prev =>
-                prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
-              )}
-              className={`w-full text-left px-4 py-3 rounded-xl transition-colors font-medium text-sm ${
-                focusSkills.includes(s)
-                  ? "bg-emerald-900/60 border border-emerald-700/60 text-emerald-300"
-                  : "bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300"
-              }`}>
-              {SKILL_LABELS[s]}
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        <div className="max-w-md md:max-w-2xl mx-auto px-4"
+          style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 24px)", paddingBottom: 48 }}>
+
+          {/* Header — mirrors active drill header */}
+          <div className="flex items-center justify-between py-3 mb-6">
+            <button
+              onClick={() => router.push("/")}
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors text-sm">
+              ←
             </button>
-          ))}
+            <div className="text-center">
+              <div className="text-sm font-semibold text-zinc-200">Focus Drill</div>
+              <div className="text-[10px] text-zinc-500 mt-0.5">select skills to drill</div>
+            </div>
+            <div className="w-9" />
+          </div>
+
+          {/* Skills grid */}
+          <div className="grid grid-cols-2 gap-2.5 mb-6">
+            {SKILL_IDS.map(s => {
+              const sel = focusSkills.includes(s);
+              return (
+                <button key={s}
+                  onClick={() => setFocusSkills(prev =>
+                    sel ? prev.filter(x => x !== s) : [...prev, s]
+                  )}
+                  className={`text-left px-4 py-4 rounded-2xl border transition-all ${
+                    sel
+                      ? "bg-emerald-950/50 border-emerald-700/60 hover:bg-emerald-950/70"
+                      : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"
+                  }`}>
+                  <div className={`text-sm font-medium ${sel ? "text-emerald-300" : "text-zinc-300"}`}>
+                    {SKILL_LABELS[s]}
+                  </div>
+                  {sel && <div className="text-[10px] text-emerald-600 mt-1">selected ✓</div>}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            disabled={!focusSkills.length}
+            onClick={() => setPhase("running")}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-800 disabled:text-zinc-400 rounded-2xl py-4 font-bold text-lg transition-colors">
+            {focusSkills.length
+              ? `Start · ${focusSkills.length} skill${focusSkills.length > 1 ? "s" : ""}`
+              : "Select a skill to begin"}
+          </button>
         </div>
-        <button
-          disabled={!focusSkills.length}
-          onClick={() => setPhase("running")}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-zinc-800 disabled:text-zinc-400 rounded-2xl py-4 font-bold text-lg transition-colors">
-          Start
-        </button>
       </main>
     );
   }
@@ -254,7 +308,7 @@ function DrillInner() {
     const simScore = correct - (attempts.length - correct);
 
     return (
-      <main className="max-w-md mx-auto px-4 pt-8 pb-8">
+      <main className="slide-up max-w-md mx-auto px-4 pt-8 pb-8">
         <h2 className="text-2xl font-bold mb-1">Done</h2>
         <p className="text-zinc-500 text-sm mb-6">Progress saved</p>
 
@@ -327,7 +381,7 @@ function DrillInner() {
         <div className="flex gap-3">
           <button onClick={() => router.push("/dashboard")}
             className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-2xl py-3 font-medium text-sm transition-colors text-zinc-300">
-            Coach Report
+            Dashboard
           </button>
           <button onClick={() => router.push("/")}
             className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-2xl py-3 font-medium text-sm transition-colors text-zinc-300">
@@ -363,10 +417,16 @@ function DrillInner() {
         <div className="flex items-center gap-2 bg-zinc-900 rounded-full px-4 py-1.5 border border-zinc-800">
           {durSecs
             ? <Timer totalSecs={durSecs} onExpire={handleExpire} running={phase === "running"} />
-            : <span className="text-zinc-500 text-sm">open</span>
+            : <span className="text-zinc-500 text-sm">untimed</span>
           }
           <span className="text-zinc-500 text-xs">·</span>
           <span className="text-zinc-400 text-sm font-medium">Q{qCount + (feedback ? 0 : 1)}</span>
+          {phase === "running" && !feedback && (
+            <>
+              <span className="text-zinc-700 text-xs">·</span>
+              <span className="text-zinc-600 text-sm font-mono tabular-nums">{qElapsed.toFixed(1)}s</span>
+            </>
+          )}
         </div>
         <button onClick={togglePause}
           className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
@@ -389,7 +449,7 @@ function DrillInner() {
       {phase === "running" && current && (
         <>
           <div className="flex-1 flex flex-col justify-between pt-2">
-            <div>
+            <div key={current.q.text} className="question-enter">
               <p className="text-xs font-medium text-zinc-600 mb-4 tracking-wide">
                 {SKILL_LABELS[current.skillId]}
               </p>
@@ -400,7 +460,7 @@ function DrillInner() {
                 <p className="text-sm text-zinc-500 mb-2">{current.q.subtext}</p>
               )}
               {feedback && (
-                <div className={`mt-2 text-base font-semibold ${feedbackColor}`}>
+                <div key={feedback} className={`feedback-pop mt-2 text-base font-semibold ${feedbackColor}`}>
                   {feedback === "correct" && "✓ Correct"}
                   {feedback === "skip"    && "→ Skipped"}
                   {feedback === "wrong" && (
@@ -425,6 +485,19 @@ function DrillInner() {
               </div>
             )}
           </div>
+
+          {/* Live session stats — only shows after first answer */}
+          {sessionStats && (
+            <div className="shrink-0 flex items-center justify-center gap-3 py-1.5 text-[11px] font-mono tabular-nums text-zinc-700">
+              <span>#{sessionStats.count}</span>
+              <span className="text-zinc-800">·</span>
+              <span>avg <span className="text-zinc-500">{sessionStats.avg.toFixed(1)}s</span></span>
+              <span className="text-zinc-800">·</span>
+              <span>best <span className="text-emerald-800">{sessionStats.min.toFixed(1)}s</span></span>
+              <span className="text-zinc-800">·</span>
+              <span>worst <span className="text-zinc-600">{sessionStats.max.toFixed(1)}s</span></span>
+            </div>
+          )}
 
           {/* Numpad */}
           <div className="shrink-0 pb-2">
