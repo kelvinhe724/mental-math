@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useCallback, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Numpad from "@/components/Numpad";
 import Timer from "@/components/Timer";
@@ -46,6 +46,7 @@ function DrillInner() {
   const [attempts,    setAttempts]    = useState<AttemptRecord[]>([]);
   const [paused,      setPaused]      = useState(false);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [qElapsed,    setQElapsed]    = useState(0);
 
   const dataRef         = useRef<PerfData>(loadData());
   const startRef        = useRef<number>(Date.now());
@@ -210,6 +211,23 @@ function DrillInner() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [phase]);
+
+  // Per-question live timer — ticks at 100ms while question is active, resets on new question
+  useEffect(() => {
+    if (phase !== "running" || feedback !== null) return;
+    const id = setInterval(() => {
+      setQElapsed((Date.now() - qStartRef.current) / 1000);
+    }, 100);
+    return () => clearInterval(id);
+  }, [current, phase, feedback]);
+
+  // Running session stats derived from all answered attempts
+  const sessionStats = useMemo(() => {
+    if (!attempts.length) return null;
+    const times = attempts.map(a => a.elapsed);
+    const avg   = times.reduce((s, t) => s + t, 0) / times.length;
+    return { count: attempts.length, avg, min: Math.min(...times), max: Math.max(...times) };
+  }, [attempts]);
 
   function togglePause() {
     if (!paused) {
@@ -403,6 +421,12 @@ function DrillInner() {
           }
           <span className="text-zinc-500 text-xs">·</span>
           <span className="text-zinc-400 text-sm font-medium">Q{qCount + (feedback ? 0 : 1)}</span>
+          {phase === "running" && !feedback && (
+            <>
+              <span className="text-zinc-700 text-xs">·</span>
+              <span className="text-zinc-600 text-sm font-mono tabular-nums">{qElapsed.toFixed(1)}s</span>
+            </>
+          )}
         </div>
         <button onClick={togglePause}
           className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
@@ -461,6 +485,19 @@ function DrillInner() {
               </div>
             )}
           </div>
+
+          {/* Live session stats — only shows after first answer */}
+          {sessionStats && (
+            <div className="shrink-0 flex items-center justify-center gap-3 py-1.5 text-[11px] font-mono tabular-nums text-zinc-700">
+              <span>#{sessionStats.count}</span>
+              <span className="text-zinc-800">·</span>
+              <span>avg <span className="text-zinc-500">{sessionStats.avg.toFixed(1)}s</span></span>
+              <span className="text-zinc-800">·</span>
+              <span>best <span className="text-emerald-800">{sessionStats.min.toFixed(1)}s</span></span>
+              <span className="text-zinc-800">·</span>
+              <span>worst <span className="text-zinc-600">{sessionStats.max.toFixed(1)}s</span></span>
+            </div>
+          )}
 
           {/* Numpad */}
           <div className="shrink-0 pb-2">
